@@ -1,16 +1,44 @@
 import numpy as np
-from torch.utils.data import Dataset
+import torch
+from torch.utils.data import Dataset, TensorDataset, DataLoader
 
 from data.data_finetune import get_finetune_dataloader
 from data.data_pretrain import get_pretrain_dataloader
-from data.utils import get_mask_dataloader
+from data.utils import get_mask_dataloader, get_all_data, to_group, get_sample_data, HsiMaskGenerator, \
+    HsiMaskTensorDataSet
+from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_without_train_val
+from utils import check_dataset
 
 
-def get_dataloader(config,is_pretrain:bool = True):
-    if is_pretrain:
-        return get_pretrain_dataloader(config)
+def get_dataloader(config, is_pretrain: bool = True):
+    halfwidth = 2
+    dataset = check_dataset(config)
+    if dataset == 'indian' or dataset == 'shanghai-hangzhou':
+        img_source, label_source, img_target, label_target = cubeData(config.DATA.DATA_SOURCE_PATH,
+                                                                      config.DATA.LABEL_SOURCE_PATH,
+                                                                      config.DATA.DATA_TARGET_PATH,
+                                                                      config.DATA.LABEL_TARGET_PATH, dataset)
     else:
-        return get_finetune_dataloader(config)
+        img_source, label_source = cubeData1(config.DATA.DATA_SOURCE_PATH, config.DATA.LABEL_SOURCE_PATH, dataset)
+        img_target, label_target = cubeData1(config.DATA.DATA_TARGET_PATH, config.DATA.LABEL_TARGET_PATH, dataset)
+    source_samples, source_labels = get_sample_data_without_train_val(img_source, label_source, halfwidth, 0)
+    target_samples, target_labels = get_sample_data_without_train_val(img_target, label_target, halfwidth, 0)
 
-def get_virtual_dataloader(config,size):
-    return get_mask_dataloader(config,size)
+    # 微调所使用的数据
+    test_img, test_label = get_all_data(img_target, label_target, halfwidth)  # 目标域全部样本
+    transform = HsiMaskGenerator(config.DATA.MASK_RATIO, test_img.shape[1],
+                                 mask_patch_size=config.DATA.MASK_PATCH_SIZE)
+    test_img = to_group(test_img, config)
+    test_dataset = HsiMaskTensorDataSet(torch.tensor(test_img), torch.tensor(test_label), transform=transform)
+    test_loader = DataLoader(test_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=False, num_workers=4)
+    src_img, src_label = get_sample_data(img_source, label_source, halfwidth, config.DATA.SAMPLE_NUM)
+    src_img = to_group(src_img, config)
+    train_dataset = HsiMaskTensorDataSet(torch.tensor(src_img), torch.tensor(src_label), transform=transform)
+    src_train_loader = DataLoader(train_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4)
+    tgt_train_loader = DataLoader(test_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4)
+
+    return test_loader, src_train_loader, tgt_train_loader
+
+
+def get_virtual_dataloader(config, size):
+    return get_mask_dataloader(config, size)

@@ -20,6 +20,7 @@ def get_pretrain_dataloader(config):
         img_target, label_target = cubeData1(config.DATA.DATA_TARGET_PATH, config.DATA.LABEL_TARGET_PATH, dataset)
     source_samples, source_labels = get_sample_data_without_train_val(img_source, label_source, halfwidth, 0)
     target_samples, target_labels = get_sample_data_without_train_val(img_target, label_target, halfwidth, 0)
+
     # 微调所使用的数据
     test_img, test_label = get_all_data(img_target, label_target, halfwidth)  # 目标域全部样本
     test_img = to_group(test_img,config)
