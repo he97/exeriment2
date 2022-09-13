@@ -26,6 +26,7 @@ from config import get_config
 from data import get_dataloader, get_virtual_dataloader, get_mask_dataloader
 from data.utils import get_tensor_dataset
 from logger import create_logger
+from lr_scheduler import build_scheduler
 from model import get_pretrain_model, get_finetune_G
 from model.Trans_BCDM_A.net_A import ResClassifier
 from model.Trans_BCDM_A.utils_A import cdd
@@ -94,9 +95,15 @@ def main(config):
     finetune_model = get_finetune_G(config).to(device=device)
     C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
-    optimizer_pretrain = build_optimizer(config, pretrain_model, pretrain=True)
-    optimizer_finetune = build_optimizer(config, finetune_model, pretrain=False)
-    optimizer_C = optim.Adam(list(C1.parameters()) + list(C2.parameters()), lr=config.TRAIN.RESC_LR.LR)
+    # optimizer
+    pretrain_optimizer = build_optimizer(config, pretrain_model, is_pretrain=True)
+    finetune_optimizer = build_optimizer(config, finetune_model, is_pretrain=False)
+    C_optimizer = optim.Adam(list(C1.parameters()) + list(C2.parameters()), lr=config.TRAIN.RESC_LR.LR)
+    # scheduler
+    sche_length = min(len(finetune_train_src_loader), len(finetune_train_tgt_loader))
+    pretrain_scheduler = build_scheduler(config, pretrain_optimizer, sche_length * 2)
+    finetune_scheduler = build_scheduler(config, finetune_optimizer, sche_length)
+    C_scheduler = build_scheduler(config, C_optimizer, sche_length)
     logger.info("Start training")
     start_time = time.time()
     # # 0的数组，size：10 1
@@ -109,7 +116,8 @@ def main(config):
     for epoch in range(config.TRAIN.EPOCHS):
         # train
         train_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
-                        finetune_train_tgt_loader, optimizer_pretrain, optimizer_finetune, optimizer_C, epoch)
+                        finetune_train_tgt_loader, pretrain_optimizer, finetune_optimizer, C_optimizer,
+                        pretrain_scheduler, finetune_scheduler, C_scheduler, epoch)
         # # pretrain
         # pretrain_train_one_epoch(config, pretrain_model, data_loader_train, optimizer_pretrain, epoch)
         # # finetune
@@ -120,12 +128,13 @@ def main(config):
             # eval
             eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
             # save model
-            save_checkpoint(config, epoch, pretrain_model, finetune_model, C1, C2, 0., optimizer_pretrain,
-                            optimizer_finetune, optimizer_C, logger)
+            save_checkpoint(config, epoch, pretrain_model, finetune_model, C1, C2, 0., pretrain_optimizer,
+                            finetune_optimizer, C_optimizer, logger)
 
 
 def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
-                    tgt_train_loader, pretrain_optim, E_optim, C_optim, epoch):
+                    tgt_train_loader, pretrain_optim, E_optim, C_optim, pretrain_scheduler, finetune_scheduler,
+                    C_scheduler, epoch):
     # 需要更换样本吗
     if on_mac:
         criterion = nn.CrossEntropyLoss()
@@ -136,6 +145,7 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
     E.train()
     C1.train()
     C2.train()
+    finetune_step = min(len(src_train_loader), len(tgt_train_loader))
 
     train_pred_all = []
     train_all = []
@@ -210,6 +220,7 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
                     f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                     f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
                     f'mem {memory_used:.0f}MB')
+            pretrain_scheduler.step_update(epoch * finetune_step * 2 + batch_idx * 2 + idx)
         epoch_time = time.time() - start
         # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
         logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
@@ -289,10 +300,13 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
 
             D_loss.backward()
             E_optim.step()
-    print('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
+        # scheduler step up
+        finetune_scheduler.step_update(epoch * finetune_step + batch_idx)
+        C_scheduler.step_update(epoch * finetune_step + batch_idx)
+    logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
         epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
     time_end_per_epoch = time.time()
-    print(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
+    logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
 
 def pretrain_train_one_epoch(config, model, data_loader, optimizer, epoch):
@@ -455,10 +469,10 @@ def finetune_train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader
 
             D_loss.backward()
             E_optim.step()
-    print('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
+    logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
         epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
     time_end_per_epoch = time.time()
-    print(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
+    logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
 
 def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
@@ -490,7 +504,7 @@ def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
         # C = metrics.confusion_matrix(val_all, val_pred_all)
         # A[iDataSet, :] = np.diag(C) / np.sum(C, 1, dtype=np.float)
         # K[iDataSet] = metrics.cohen_kappa_score(val_all, val_pred_all)
-        print('\tval_Accuracy: {}/{} ({:.2f}%)\t'.format(correct, total, 100. * correct / total))
+        logger.info('\tval_Accuracy: {}/{} ({:.2f}%)\t'.format(correct, total, 100. * correct / total))
 
 
 if __name__ == '__main__':

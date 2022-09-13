@@ -155,11 +155,17 @@ _C.MODEL.Dtransformer.DEPTH = 3
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
 _C.TRAIN.EPOCHS = 300
-_C.TRAIN.WARMUP_EPOCHS = 20
+_C.TRAIN.WARMUP_EPOCHS = 10
 _C.TRAIN.WEIGHT_DECAY = 0.05
-_C.TRAIN.BASE_LR = 5e-4
-_C.TRAIN.WARMUP_LR = 5e-7
-_C.TRAIN.MIN_LR = 5e-6
+_C.TRAIN.BASE_LR = 8e-4
+_C.TRAIN.WARMUP_LR = 5e-6
+_C.TRAIN.MIN_LR = 5e-7
+_C.TRAIN.FINETUNE = CN()
+_C.TRAIN.FINETUNE.WARMUP_EPOCHS = 10
+_C.TRAIN.FINETUNE.WEIGHT_DECAY = 0.05
+_C.TRAIN.FINETUNE.BASE_LR = 5e-3
+_C.TRAIN.FINETUNE.WARMUP_LR = 5e-6
+_C.TRAIN.FINETUNE.MIN_LR = 5e-7
 # Clip gradient norm
 _C.TRAIN.CLIP_GRAD = 5.0
 # Auto resume from latest checkpoint
@@ -195,12 +201,6 @@ _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
 # [SimMIM] Layer decay for fine-tuning
 _C.TRAIN.LAYER_DECAY = 1.0
 
-_C.TRAIN.PRETRAIN_LR = CN()
-_C.TRAIN.PRETRAIN_LR.LR = 1e-5
-_C.TRAIN.FINETUNE_LR = CN()
-_C.TRAIN.FINETUNE_LR.LR = 1e-7
-_C.TRAIN.RESC_LR = CN()
-_C.TRAIN.RESC_LR.LR = 1e-5
 
 # -----------------------------------------------------------------------------
 # Augmentation settings
