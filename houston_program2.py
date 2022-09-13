@@ -30,7 +30,7 @@ from lr_scheduler import build_scheduler
 from model import get_pretrain_model, get_finetune_G
 from model.Trans_BCDM_A.net_A import ResClassifier
 from model.Trans_BCDM_A.utils_A import cdd
-from optimizer import build_optimizer
+from optimizer import build_optimizer, build_optimizer_c
 from utils import get_grad_norm, save_checkpoint
 
 
@@ -96,9 +96,9 @@ def main(config):
     C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     # optimizer
-    pretrain_optimizer = build_optimizer(config, pretrain_model, is_pretrain=True)
-    finetune_optimizer = build_optimizer(config, finetune_model, is_pretrain=False)
-    C_optimizer = optim.Adam(list(C1.parameters()) + list(C2.parameters()), lr=config.TRAIN.RESC_LR.LR)
+    pretrain_optimizer = build_optimizer(config, pretrain_model, logger, is_pretrain=True)
+    finetune_optimizer = build_optimizer(config, finetune_model, logger, is_pretrain=False)
+    C_optimizer = build_optimizer_c(C1, C2, config, logger)
     # scheduler
     sche_length = min(len(finetune_train_src_loader), len(finetune_train_tgt_loader))
     pretrain_scheduler = build_scheduler(config, pretrain_optimizer, sche_length * 2)
