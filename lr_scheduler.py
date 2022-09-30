@@ -64,6 +64,55 @@ def build_scheduler(config, optimizer, n_iter_per_epoch):
     return lr_scheduler
 
 
+def build_finetune_scheduler(config, optimizer, n_iter_per_epoch,ft_epochs):
+    num_steps = int(ft_epochs * n_iter_per_epoch)
+    warmup_steps = int(config.TRAIN.WARMUP_EPOCHS * n_iter_per_epoch)
+    decay_steps = int(config.TRAIN.LR_SCHEDULER.DECAY_EPOCHS * n_iter_per_epoch)
+    multi_steps = [i * n_iter_per_epoch for i in config.TRAIN.LR_SCHEDULER.MULTISTEPS]
+
+    lr_scheduler = None
+    if config.TRAIN.LR_SCHEDULER.NAME == 'cosine':
+        lr_scheduler = CosineLRScheduler(
+            optimizer,
+            t_initial=num_steps,
+            cycle_mul=1.,
+            lr_min=config.TRAIN.MIN_LR,
+            warmup_lr_init=config.TRAIN.WARMUP_LR,
+            warmup_t=warmup_steps,
+            cycle_limit=1,
+            t_in_epochs=False,
+        )
+    elif config.TRAIN.LR_SCHEDULER.NAME == 'linear':
+        lr_scheduler = LinearLRScheduler(
+            optimizer,
+            t_initial=num_steps,
+            lr_min_rate=0.01,
+            warmup_lr_init=config.TRAIN.WARMUP_LR,
+            warmup_t=warmup_steps,
+            t_in_epochs=False,
+        )
+    elif config.TRAIN.LR_SCHEDULER.NAME == 'step':
+        lr_scheduler = StepLRScheduler(
+            optimizer,
+            decay_t=decay_steps,
+            decay_rate=config.TRAIN.LR_SCHEDULER.DECAY_RATE,
+            warmup_lr_init=config.TRAIN.WARMUP_LR,
+            warmup_t=warmup_steps,
+            t_in_epochs=False,
+        )
+    elif config.TRAIN.LR_SCHEDULER.NAME == 'multistep':
+        lr_scheduler = MultiStepLRScheduler(
+            optimizer,
+            milestones=multi_steps,
+            gamma=config.TRAIN.LR_SCHEDULER.GAMMA,
+            warmup_lr_init=config.TRAIN.WARMUP_LR,
+            warmup_t=warmup_steps,
+            t_in_epochs=False,
+        )
+
+    return lr_scheduler
+
+
 class LinearLRScheduler(Scheduler):
     def __init__(self,
                  optimizer: torch.optim.Optimizer,
@@ -117,9 +166,10 @@ class LinearLRScheduler(Scheduler):
 
 
 class MultiStepLRScheduler(Scheduler):
-    def __init__(self, optimizer: torch.optim.Optimizer, milestones, gamma=0.1, warmup_t=0, warmup_lr_init=0, t_in_epochs=True) -> None:
+    def __init__(self, optimizer: torch.optim.Optimizer, milestones, gamma=0.1, warmup_t=0, warmup_lr_init=0,
+                 t_in_epochs=True) -> None:
         super().__init__(optimizer, param_group_field="lr")
-        
+
         self.milestones = milestones
         self.gamma = gamma
         self.warmup_t = warmup_t
@@ -130,9 +180,9 @@ class MultiStepLRScheduler(Scheduler):
             super().update_groups(self.warmup_lr_init)
         else:
             self.warmup_steps = [1 for _ in self.base_values]
-        
+
         assert self.warmup_t <= min(self.milestones)
-    
+
     def _get_lr(self, t):
         if t < self.warmup_t:
             lrs = [self.warmup_lr_init + t * s for s in self.warmup_steps]

@@ -26,7 +26,7 @@ from config import get_config
 from data import get_dataloader, get_virtual_dataloader, get_mask_dataloader
 from data.utils import get_tensor_dataset
 from logger import create_logger
-from lr_scheduler import build_scheduler
+from lr_scheduler import build_scheduler, build_finetune_scheduler
 from model import get_pretrain_model, get_finetune_G
 from model.Trans_BCDM_A.net_A import ResClassifier
 from model.Trans_BCDM_A.utils_A import cdd
@@ -90,6 +90,7 @@ def main(config):
             config, is_pretrain=True)
     # 设置模型及优化器，不设置动态更新学习率了
     device = 'cpu' if on_mac else 'cuda'
+    finetune_epochs = 100
     # device = 'cpu'
     pretrain_model = get_pretrain_model(config).to(device=device)
     finetune_model = get_finetune_G(config).to(device=device)
@@ -125,6 +126,9 @@ def main(config):
         #                          finetune_train_tgt_loader, optimizer_finetune, optimizer_C, epoch)
         # # eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
         if (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+            # finetune
+            finetune_train_epochs_restore(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
+                                          finetune_train_tgt_loader, finetune_optimizer, C_optimizer, epoch, finetune_epochs)
             # eval
             eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
             # save model
@@ -364,8 +368,8 @@ def pretrain_train_one_epoch(config, model, data_loader, optimizer, epoch):
     logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
 
 
-def finetune_train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim,
-                             epoch):
+def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, finetune_scheduler, C_scheduler,
+                          epoch, finetune_epochs):
     # 需要更换样本吗
     if on_mac:
         criterion = nn.CrossEntropyLoss()
@@ -376,6 +380,7 @@ def finetune_train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader
     E.train()
     C1.train()
     C2.train()
+    finetune_step = min(len(src_train_loader), len(tgt_train_loader))
 
     train_pred_all = []
     train_all = []
@@ -383,76 +388,49 @@ def finetune_train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader
     total = 0
 
     time_start_per_epoch = time.time()
-    for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
-        (data_s, label_s), (data_t, label_t) = data
-        if not on_mac:
-            data_s, label_s = data_s.cuda(), label_s.cuda()
-            data_t, label_t = data_t.cuda(), label_t.cuda()
-        data_all = Variable(torch.cat((data_s, data_t), 0))
-        # data_all = data_all.type(torch.LongTensor)
-        label_s = label_s.long()
-        label_s = Variable(label_s)
-        bs = len(label_s)
+    for epoch in range(finetune_epochs):
+        for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
+            (data_s, label_s), (data_t, label_t) = data
+            if not on_mac:
+                data_s, label_s = data_s.cuda(), label_s.cuda()
+                data_t, label_t = data_t.cuda(), label_t.cuda()
+            data_all = Variable(torch.cat((data_s, data_t), 0))
+            # data_all = data_all.type(torch.LongTensor)
+            label_s = label_s.long()
+            label_s = Variable(label_s)
+            bs = len(label_s)
 
-        """source domain discriminative"""
-        # Step A train all networks to minimize loss on source
-        E_optim.zero_grad()
-        C_optim.zero_grad()
-
-        output = E(data_all, pretrain_model)
-        # 输出size是64 512
-        output1 = C1(output)
-        output2 = C2(output)
-        output_s1 = output1[:bs, :]
-        output_s2 = output2[:bs, :]
-        output_t1 = output1[bs:, :]
-        output_t2 = output2[bs:, :]
-        output_t1 = F.softmax(output_t1, dim=1)
-        output_t2 = F.softmax(output_t2, dim=1)
-        entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
-        entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
-        loss1 = criterion(output_s1, label_s)
-        loss2 = criterion(output_s2, label_s)
-
-        all_loss = loss1 + loss2 + 0.01 * entropy_loss
-        all_loss.backward()
-        E_optim.step()
-        C_optim.step()
-
-        """target domain discriminative"""
-        # Step B train classifier to maximize discrepancy
-        E_optim.zero_grad()
-        C_optim.zero_grad()
-
-        output = E(data_all, pretrain_model)
-        output1 = C1(output)
-        output2 = C2(output)
-        output_s1 = output1[:bs, :]
-        output_s2 = output2[:bs, :]
-        output_t1 = output1[bs:, :]
-        output_t2 = output2[bs:, :]
-        output_t1 = F.softmax(output_t1, dim=1)
-        output_t2 = F.softmax(output_t2, dim=1)
-
-        loss1 = criterion(output_s1, label_s)
-        loss2 = criterion(output_s2, label_s)
-        entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
-        entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
-        loss_dis = cdd(output_t1, output_t2)
-
-        F_loss = loss1 + loss2 - eta * loss_dis + 0.01 * entropy_loss
-        F_loss.backward()
-        C_optim.step()
-
-        # Step C train genrator to minimize discrepancy
-        NUM_K = 4
-        for i in range(NUM_K):
-            E.zero_grad()
+            """source domain discriminative"""
+            # Step A train all networks to minimize loss on source
+            E_optim.zero_grad()
             C_optim.zero_grad()
 
             output = E(data_all, pretrain_model)
-            features_source = output[:bs, :]
-            features_target = output[bs:, :]
+            # 输出size是64 512
+            output1 = C1(output)
+            output2 = C2(output)
+            output_s1 = output1[:bs, :]
+            output_s2 = output2[:bs, :]
+            output_t1 = output1[bs:, :]
+            output_t2 = output2[bs:, :]
+            output_t1 = F.softmax(output_t1, dim=1)
+            output_t2 = F.softmax(output_t2, dim=1)
+            entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+            entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
+            loss1 = criterion(output_s1, label_s)
+            loss2 = criterion(output_s2, label_s)
+
+            all_loss = loss1 + loss2 + 0.01 * entropy_loss
+            all_loss.backward()
+            E_optim.step()
+            C_optim.step()
+
+            """target domain discriminative"""
+            # Step B train classifier to maximize discrepancy
+            E_optim.zero_grad()
+            C_optim.zero_grad()
+
+            output = E(data_all, pretrain_model)
             output1 = C1(output)
             output2 = C2(output)
             output_s1 = output1[:bs, :]
@@ -462,18 +440,64 @@ def finetune_train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader
             output_t1 = F.softmax(output_t1, dim=1)
             output_t2 = F.softmax(output_t2, dim=1)
 
+            loss1 = criterion(output_s1, label_s)
+            loss2 = criterion(output_s2, label_s)
             entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
             entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
             loss_dis = cdd(output_t1, output_t2)
-            D_loss = eta * loss_dis + 0.01 * entropy_loss
 
-            D_loss.backward()
-            E_optim.step()
+            F_loss = loss1 + loss2 - eta * loss_dis + 0.01 * entropy_loss
+            F_loss.backward()
+            C_optim.step()
+
+            # Step C train genrator to minimize discrepancy
+            NUM_K = 4
+            for i in range(NUM_K):
+                E.zero_grad()
+                C_optim.zero_grad()
+
+                output = E(data_all, pretrain_model)
+                features_source = output[:bs, :]
+                features_target = output[bs:, :]
+                output1 = C1(output)
+                output2 = C2(output)
+                output_s1 = output1[:bs, :]
+                output_s2 = output2[:bs, :]
+                output_t1 = output1[bs:, :]
+                output_t2 = output2[bs:, :]
+                output_t1 = F.softmax(output_t1, dim=1)
+                output_t2 = F.softmax(output_t2, dim=1)
+
+                entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+                entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
+                loss_dis = cdd(output_t1, output_t2)
+                D_loss = eta * loss_dis + 0.01 * entropy_loss
+
+                D_loss.backward()
+                E_optim.step()
+            # scheduler step up
+            finetune_scheduler.step_update(epoch * finetune_step + batch_idx)
+            C_scheduler.step_update(epoch * finetune_step + batch_idx)
     logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
         epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
     time_end_per_epoch = time.time()
     logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
+def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, epoch, finetune_epochs):
+    finetune_optimizer = build_optimizer(config, E, logger, is_pretrain=False)
+    C_optimizer = build_optimizer_c(C1, C2, config, logger)
+    sche_length = min(len(src_train_loader), len(tgt_train_loader))
+    finetune_scheduler = build_finetune_scheduler(config, finetune_optimizer, sche_length, ft_epochs=finetune_epochs)
+    C_scheduler = build_finetune_scheduler(config, C_optimizer, sche_length, ft_epochs=finetune_epochs)
+    # 复制一下原始双分类器的值
+    pretrain_model_state = pretrain_model.state_dict().clone().detach()
+    E_state = E.state_dict().clone.detach()
+
+    finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, epoch, finetune_epochs)
+
+    # 恢复之前的参数
+    pretrain_model.load_state_dict(pretrain_model_state)
+    E.load_state_dict(E_state)
 
 def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
     pretrain_model.eval()
