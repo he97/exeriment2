@@ -12,6 +12,7 @@ import argparse
 import datetime
 import os
 import time
+import copy
 
 import numpy as np
 import torch
@@ -388,12 +389,12 @@ def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, t
     total = 0
 
     time_start_per_epoch = time.time()
-    for epoch in range(finetune_epochs):
+    for i in range(finetune_epochs):
         for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
-            (data_s, label_s), (data_t, label_t) = data
+            (data_s, mask_s, label_s), (data_t, mask_t, label_t) = data
             if not on_mac:
-                data_s, label_s = data_s.cuda(), label_s.cuda()
-                data_t, label_t = data_t.cuda(), label_t.cuda()
+                data_s, mask_s, label_s = data_s.cuda(), mask_s.cuda(), label_s.cuda()
+                data_t, mask_t, label_t = data_t.cuda(), mask_t.cuda(), label_t.cuda()
             data_all = Variable(torch.cat((data_s, data_t), 0))
             # data_all = data_all.type(torch.LongTensor)
             label_s = label_s.long()
@@ -490,10 +491,121 @@ def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_l
     finetune_scheduler = build_finetune_scheduler(config, finetune_optimizer, sche_length, ft_epochs=finetune_epochs)
     C_scheduler = build_finetune_scheduler(config, C_optimizer, sche_length, ft_epochs=finetune_epochs)
     # 复制一下原始双分类器的值
-    pretrain_model_state = pretrain_model.state_dict().clone().detach()
-    E_state = E.state_dict().clone.detach()
+    pretrain_model_state = copy.deepcopy(pretrain_model.state_dict())
+    E_state = copy.deepcopy(E.state_dict())
 
-    finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, epoch, finetune_epochs)
+    # 需要更换样本吗
+    if on_mac:
+        criterion = nn.CrossEntropyLoss()
+    else:
+        criterion = nn.CrossEntropyLoss().cuda()
+    eta = 0.01
+    pretrain_model.eval()
+    E.train()
+    C1.train()
+    C2.train()
+    finetune_step = min(len(src_train_loader), len(tgt_train_loader))
+
+    train_pred_all = []
+    train_all = []
+    correct = 0
+    total = 0
+
+    time_start_per_epoch = time.time()
+    for i in range(finetune_epochs):
+        for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
+            (data_s, mask_s, label_s), (data_t, mask_t, label_t) = data
+            if not on_mac:
+                data_s, mask_s, label_s = data_s.cuda(), mask_s.cuda(), label_s.cuda()
+                data_t, mask_t, label_t = data_t.cuda(), mask_t.cuda(), label_t.cuda()
+            data_all = Variable(torch.cat((data_s, data_t), 0))
+            # data_all = data_all.type(torch.LongTensor)
+            label_s = label_s.long()
+            label_s = Variable(label_s)
+            bs = len(label_s)
+
+            """source domain discriminative"""
+            # Step A train all networks to minimize loss on source
+            E_optim.zero_grad()
+            C_optim.zero_grad()
+
+            output = E(data_all, pretrain_model)
+            # 输出size是64 512
+            output1 = C1(output)
+            output2 = C2(output)
+            output_s1 = output1[:bs, :]
+            output_s2 = output2[:bs, :]
+            output_t1 = output1[bs:, :]
+            output_t2 = output2[bs:, :]
+            output_t1 = F.softmax(output_t1, dim=1)
+            output_t2 = F.softmax(output_t2, dim=1)
+            entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+            entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
+            loss1 = criterion(output_s1, label_s)
+            loss2 = criterion(output_s2, label_s)
+
+            all_loss = loss1 + loss2 + 0.01 * entropy_loss
+            all_loss.backward()
+            E_optim.step()
+            C_optim.step()
+
+            """target domain discriminative"""
+            # Step B train classifier to maximize discrepancy
+            E_optim.zero_grad()
+            C_optim.zero_grad()
+
+            output = E(data_all, pretrain_model)
+            output1 = C1(output)
+            output2 = C2(output)
+            output_s1 = output1[:bs, :]
+            output_s2 = output2[:bs, :]
+            output_t1 = output1[bs:, :]
+            output_t2 = output2[bs:, :]
+            output_t1 = F.softmax(output_t1, dim=1)
+            output_t2 = F.softmax(output_t2, dim=1)
+
+            loss1 = criterion(output_s1, label_s)
+            loss2 = criterion(output_s2, label_s)
+            entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+            entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
+            loss_dis = cdd(output_t1, output_t2)
+
+            F_loss = loss1 + loss2 - eta * loss_dis + 0.01 * entropy_loss
+            F_loss.backward()
+            C_optim.step()
+
+            # Step C train genrator to minimize discrepancy
+            NUM_K = 4
+            for i in range(NUM_K):
+                E.zero_grad()
+                C_optim.zero_grad()
+
+                output = E(data_all, pretrain_model)
+                features_source = output[:bs, :]
+                features_target = output[bs:, :]
+                output1 = C1(output)
+                output2 = C2(output)
+                output_s1 = output1[:bs, :]
+                output_s2 = output2[:bs, :]
+                output_t1 = output1[bs:, :]
+                output_t2 = output2[bs:, :]
+                output_t1 = F.softmax(output_t1, dim=1)
+                output_t2 = F.softmax(output_t2, dim=1)
+
+                entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+                entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
+                loss_dis = cdd(output_t1, output_t2)
+                D_loss = eta * loss_dis + 0.01 * entropy_loss
+
+                D_loss.backward()
+                E_optim.step()
+            # scheduler step up
+            finetune_scheduler.step_update(epoch * finetune_step + batch_idx)
+            C_scheduler.step_update(epoch * finetune_step + batch_idx)
+    logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
+        epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
+    time_end_per_epoch = time.time()
+    logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
     # 恢复之前的参数
     pretrain_model.load_state_dict(pretrain_model_state)
