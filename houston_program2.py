@@ -92,6 +92,7 @@ def main(config):
     # 设置模型及优化器，不设置动态更新学习率了
     device = 'cpu' if on_mac else 'cuda'
     finetune_epochs = 100
+
     # device = 'cpu'
     pretrain_model = get_pretrain_model(config).to(device=device)
     finetune_model = get_finetune_G(config).to(device=device)
@@ -106,6 +107,7 @@ def main(config):
     pretrain_scheduler = build_scheduler(config, pretrain_optimizer, sche_length * 2)
     finetune_scheduler = build_scheduler(config, finetune_optimizer, sche_length)
     C_scheduler = build_scheduler(config, C_optimizer, sche_length)
+    combine_data = zip(finetune_train_src_loader, finetune_train_tgt_loader)
     logger.info("Start training")
     start_time = time.time()
     # # 0的数组，size：10 1
@@ -117,8 +119,7 @@ def main(config):
     seeds = [1330, 1220, 1336, 1337, 1334, 1236, 1226, 1235, 1228, 1229]
     for epoch in range(config.TRAIN.EPOCHS):
         # train
-        train_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
-                        finetune_train_tgt_loader, pretrain_optimizer, finetune_optimizer, C_optimizer,
+        train_one_epoch(config, pretrain_model, finetune_model, C1, C2, combine_data, pretrain_optimizer, finetune_optimizer, C_optimizer,
                         pretrain_scheduler, finetune_scheduler, C_scheduler, epoch)
         # # pretrain
         # pretrain_train_one_epoch(config, pretrain_model, data_loader_train, optimizer_pretrain, epoch)
@@ -128,8 +129,7 @@ def main(config):
         # # eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
         if (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
             # finetune
-            finetune_train_epochs_restore(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
-                                          finetune_train_tgt_loader, finetune_optimizer, C_optimizer, epoch, finetune_epochs)
+            finetune_train_epochs_restore(config, pretrain_model, finetune_model, C1, C2, combine_data, finetune_optimizer, C_optimizer, epoch, finetune_epochs)
             # eval
             eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
             # save model
@@ -137,8 +137,7 @@ def main(config):
                             finetune_optimizer, C_optimizer, logger)
 
 
-def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
-                    tgt_train_loader, pretrain_optim, E_optim, C_optim, pretrain_scheduler, finetune_scheduler,
+def train_one_epoch(config, pretrain_model, E, C1, C2,combine_data, pretrain_optim, E_optim, C_optim, pretrain_scheduler, finetune_scheduler,
                     C_scheduler, epoch):
     # 需要更换样本吗
     if on_mac:
@@ -150,7 +149,7 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
     E.train()
     C1.train()
     C2.train()
-    finetune_step = min(len(src_train_loader), len(tgt_train_loader))
+    finetune_step = len(combine_data)
 
     train_pred_all = []
     train_all = []
@@ -158,7 +157,7 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
     total = 0
 
     time_start_per_epoch = time.time()
-    for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
+    for batch_idx, data in enumerate(combine_data):
         (data_s, mask_s, label_s), (data_t, mask_t, label_t) = data
         assert data_s.shape == data_t.shape, '数据形状不一致'
         data_loader = [[], []]
@@ -484,10 +483,10 @@ def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, t
     time_end_per_epoch = time.time()
     logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
-def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, epoch, finetune_epochs):
+def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, combine_data, E_optim, C_optim, epoch, finetune_epochs):
     finetune_optimizer = build_optimizer(config, E, logger, is_pretrain=False)
     C_optimizer = build_optimizer_c(C1, C2, config, logger)
-    sche_length = min(len(src_train_loader), len(tgt_train_loader))
+    sche_length = len(combine_data)
     finetune_scheduler = build_finetune_scheduler(config, finetune_optimizer, sche_length, ft_epochs=finetune_epochs)
     C_scheduler = build_finetune_scheduler(config, C_optimizer, sche_length, ft_epochs=finetune_epochs)
     # 复制一下原始双分类器的值
@@ -504,7 +503,7 @@ def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_l
     E.train()
     C1.train()
     C2.train()
-    finetune_step = min(len(src_train_loader), len(tgt_train_loader))
+    finetune_step = len(combine_data)
 
     train_pred_all = []
     train_all = []
@@ -513,7 +512,7 @@ def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_l
 
     time_start_per_epoch = time.time()
     for i in range(finetune_epochs):
-        for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
+        for batch_idx, data in enumerate(len(combine_data)):
             (data_s, mask_s, label_s), (data_t, mask_t, label_t) = data
             if not on_mac:
                 data_s, mask_s, label_s = data_s.cuda(), mask_s.cuda(), label_s.cuda()
@@ -645,7 +644,7 @@ def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
 
 if __name__ == '__main__':
     _, config = parse_option()
-    on_mac = True
+    on_mac = False
 
     # C:/ProgramData/Anaconda3/envs/CGDM/Lib/site-packages/apex/amp/_amp_state.py 修改了调用问题
 
