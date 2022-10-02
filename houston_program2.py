@@ -127,11 +127,32 @@ def main(config):
         #                          finetune_train_tgt_loader, optimizer_finetune, optimizer_C, epoch)
         # # eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
         if (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+            temp_finetune_optimizer = build_optimizer(config, finetune_model, logger, is_pretrain=False)
+            temp_C_optimizer = build_optimizer_c(C1, C2, config, logger)
+            temp_sche_length = min(len(finetune_train_src_loader), len(finetune_train_tgt_loader))
+            temp_finetune_scheduler = build_finetune_scheduler(config, temp_finetune_optimizer, temp_sche_length,
+                                                          ft_epochs=finetune_epochs)
+            temp_C_scheduler = build_finetune_scheduler(config, temp_C_optimizer, temp_sche_length, ft_epochs=finetune_epochs)
+            # 复制一下原始双分类器的值
+            E_state = copy.deepcopy(finetune_model.state_dict())
+            C1_state = copy.deepcopy(C1.state_dict())
+            C2_state = copy.deepcopy(C2.state_dict())
             # finetune
-            finetune_train_epochs_restore(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
-                                          finetune_train_tgt_loader, finetune_optimizer, C_optimizer, epoch, finetune_epochs)
+            finetune_train_epochs(config,pretrain_model,finetune_model,C1,C2,finetune_train_src_loader,
+                                  finetune_train_tgt_loader,temp_finetune_optimizer,temp_C_optimizer,
+                                  temp_finetune_scheduler,temp_C_scheduler,
+                                  epoch,finetune_epochs)
             # eval
             eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
+
+            # restore value
+            finetune_model.load_state_dict(E_state)
+            C1.load_state_dict(C1_state)
+            C2.load_state_dict(C2_state)
+            finetune_model.zero_grad()
+            pretrain_model.zero_grad()
+            C1.zero_grad()
+            C2.zero_grad()
             # save model
             save_checkpoint(config, epoch, pretrain_model, finetune_model, C1, C2, 0., pretrain_optimizer,
                             finetune_optimizer, C_optimizer, logger)
@@ -389,7 +410,7 @@ def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, t
     total = 0
 
     time_start_per_epoch = time.time()
-    for i in range(finetune_epochs):
+    for ft_epoch in range(finetune_epochs):
         for batch_idx, data in enumerate(zip(src_train_loader, tgt_train_loader)):
             (data_s, mask_s, label_s), (data_t, mask_t, label_t) = data
             if not on_mac:
@@ -477,10 +498,19 @@ def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, t
                 D_loss.backward()
                 E_optim.step()
             # scheduler step up
-            finetune_scheduler.step_update(epoch * finetune_step + batch_idx)
-            C_scheduler.step_update(epoch * finetune_step + batch_idx)
-    logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
-        epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
+            finetune_scheduler.step_update(ft_epoch * finetune_step + batch_idx)
+            C_scheduler.step_update(ft_epoch * finetune_step + batch_idx)
+        logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
+            epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
+        E_lr_1 = E_optim.param_groups[0]['lr']
+        E_lr_2 = E_optim.param_groups[1]['lr']
+
+        C_lr_1 = C_optim.param_groups[0]['lr']
+        C_lr_2 = C_optim.param_groups[1]['lr']
+        C_lr_3 = C_optim.param_groups[2]['lr']
+        C_lr_4 = C_optim.param_groups[3]['lr']
+        logger.info('E_lr_1: {:.6f}\t E_lr_2:{:.6f}'.format(E_lr_1,E_lr_2))
+        logger.info('C_lr_1: {:.6f}\t C_lr_2:{:.6f}\t C_lr_3:{:.6f}\t C_lr_4:{:.6f}'.format(C_lr_1, C_lr_2, C_lr_3, C_lr_4))
     time_end_per_epoch = time.time()
     logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
@@ -602,8 +632,8 @@ def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_l
             # scheduler step up
             finetune_scheduler.step_update(epoch * finetune_step + batch_idx)
             C_scheduler.step_update(epoch * finetune_step + batch_idx)
-    logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
-        epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
+        logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
+            epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
     time_end_per_epoch = time.time()
     logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
@@ -645,7 +675,7 @@ def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
 
 if __name__ == '__main__':
     _, config = parse_option()
-    on_mac = True
+    on_mac = False
 
     # C:/ProgramData/Anaconda3/envs/CGDM/Lib/site-packages/apex/amp/_amp_state.py 修改了调用问题
 
