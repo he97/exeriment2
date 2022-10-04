@@ -137,6 +137,8 @@ def main(config):
             E_state = copy.deepcopy(finetune_model.state_dict())
             C1_state = copy.deepcopy(C1.state_dict())
             C2_state = copy.deepcopy(C2.state_dict())
+            # eval
+            eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
             # finetune
             finetune_train_epochs(config,pretrain_model,finetune_model,C1,C2,finetune_train_src_loader,
                                   finetune_train_tgt_loader,temp_finetune_optimizer,temp_C_optimizer,
