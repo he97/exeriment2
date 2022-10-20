@@ -1,9 +1,52 @@
-from model.finetune_model import build_finetune_G
-from model.pretrain_model import build_model
+from torch import nn
 
+from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G
+from model.decoder import mask_decoder
+from model.encoder import VisionTransformerForDemo
+from model.finetune_model import build_finetune_G
+from model.pretrain_model import build_model, SimMIMForHsi
+import math
+from functools import partial
 
 def get_pretrain_model(config):
     return build_model(config)
 
 def get_finetune_G(config):
     return build_finetune_G(config)
+def get_decoder(config):
+    encoder_stride = config.DATA.MASK_PATCH_SIZE
+    model = mask_decoder(config,encoder_stride=encoder_stride)
+    return model
+def get_G(config):
+    model_type = config.MODEL.TYPE
+    if model_type == 'vit':
+        # raise Exception('vit not support')
+        encoder = VisionTransformerForDemo(
+            img_size=config.DATA.IMG_SIZE,
+            patch_size=config.MODEL.VIT.PATCH_SIZE,
+            in_chans=config.MODEL.VIT.IN_CHANS,
+            num_classes=0,
+            group = config.DATA.CHANNEL_DIM // config.DATA.MASK_PATCH_SIZE,
+            embed_dim_in=config.DATA.IMG_SIZE**2*config.DATA.MASK_PATCH_SIZE,
+            embed_dim=config.MODEL.VIT.EMBED_DIM,
+            depth=config.MODEL.VIT.DEPTH,
+            num_heads=config.MODEL.VIT.NUM_HEADS,
+            mlp_ratio=config.MODEL.VIT.MLP_RATIO,
+            qkv_bias=config.MODEL.VIT.QKV_BIAS,
+            drop_rate=config.MODEL.DROP_RATE,
+            drop_path_rate=config.MODEL.DROP_PATH_RATE,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            init_values=config.MODEL.VIT.INIT_VALUES,
+            use_abs_pos_emb=config.MODEL.VIT.USE_APE,
+            use_rel_pos_bias=config.MODEL.VIT.USE_RPB,
+            use_shared_rel_pos_bias=config.MODEL.VIT.USE_SHARED_RPB,
+            use_mean_pooling=config.MODEL.VIT.USE_MEAN_POOLING)
+        encoder_stride = 16
+    elif model_type == 'Dtransformer':
+        # 首先呢 输入的部分
+        encoder = build_Dtransformer_as_G(config)
+        # encode_stride 是 patch的边长
+        # encoder_stride = config.DATA.MASK_PATCH_SIZE
+    else:
+        raise NotImplementedError(f"Unknown pre-train model: {model_type}")
+    return encoder

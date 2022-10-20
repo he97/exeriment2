@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+import config
 from model.Trans_BCDM_A.net_A import build_Dtransformer
 
 class SimMIMForHsi(nn.Module):

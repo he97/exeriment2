@@ -132,8 +132,8 @@ _C.MODEL.VIT.USE_MEAN_POOLING = False
 
 # Dtransformer Transformer parameters
 _C.MODEL.Dtransformer = CN()
-_C.MODEL.Dtransformer.PATCH_SIZE = 4
-_C.MODEL.Dtransformer.IN_CHANS = 3
+_C.MODEL.Dtransformer.PATCH_SIZE = 5
+_C.MODEL.Dtransformer.IN_CHANS = 48
 _C.MODEL.Dtransformer.EMBED_DIM = 96
 _C.MODEL.Dtransformer.DEPTHS = [2, 2, 6, 2]
 _C.MODEL.Dtransformer.NUM_HEADS = [3, 6, 12, 24]
@@ -144,6 +144,7 @@ _C.MODEL.Dtransformer.QK_SCALE = None
 _C.MODEL.Dtransformer.APE = False
 _C.MODEL.Dtransformer.PATCH_NORM = True
 _C.MODEL.Dtransformer.DEPTH = 3
+_C.MODEL.Dtransformer.PATCH_DIM = 512
 
 
 # -----------------------------------------------------------------------------

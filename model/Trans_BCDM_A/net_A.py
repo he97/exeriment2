@@ -790,13 +790,120 @@ class DtransformerForSimMIM(DTransformer):
     def no_weight_decay_keywords(self):
         return {'relative_position_bias_table'}
 
+class Dtransformer_as_G(DTransformer):
+    def __init__(self, mask_patch_size=1, **kwargs):
+        self.mask_patch_size = mask_patch_size
+        super().__init__(**kwargs)
+
+        # assert self.num_classes == 0
+
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        self._trunc_normal_(self.mask_token, std=.02)
+
+    def _trunc_normal_(self, tensor, mean=0., std=1.):
+        trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
+
+    def forward(self, x, mask):
+        if mask is not None:
+            x = self.patch_embed(x)
+
+            assert mask is not None
+            B, L, _ = x.shape
+
+            mask_token = self.mask_token.expand(B, L, -1)
+            # mask = mask.repeat(1, self.mask_patch_size)
+            # w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+            w = mask.unsqueeze(-1).type_as(mask_token)
+            x = x * (1 - w) + mask_token * w
+
+            # result = x - mask_token*w
+            # 师哥的代码的cls_tokens
+            cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=B)  # stole cls_tokens impl from Phil Wang, thanks
+            x = torch.cat((cls_tokens, x), dim=1)
+
+            b, n, _ = x.shape
+
+            # if self.pos_embed is True:
+            x += self.pos_embedding[:, :(n + 1)]
+
+            # cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=b)
+            # x = torch.cat((cls_tokens, x), dim=1)
+
+            x = self.dropout(x)
+
+            x = self.attn_layers(x)
+
+            # x = self.pos_drop(x)
+
+            # for layer in self.layers:
+            #     x = layer(x)
+            # 一个正则项
+            x = self.norm(x)
+            x = x[:, 1:]
+            # x 32 2304 128
+            # x = x.transpose(1, 2)
+            # B, C, L = x.shape
+            # height 和 weight 变为48
+            # H = W = int(L ** 0.5)
+            # 重新构建tensor 32 128 48 48
+            # x = x.reshape(B, C, H, W)
+
+            # rel_pos_bias = self.rel_pos_bias() if self.rel_pos_bias is not None else None
+            return x
+            # for blk in self.blocks:
+            #     x = blk(x, rel_pos_bias=rel_pos_bias)
+            # x = self.norm(x)
+            #
+            # x = x[:, 1:]
+            # B, L, C = x.shape
+            # H = W = int(L ** 0.5)
+            # x = x.permute(0, 2, 1).reshape(B, C, H, W)
+            # return x
+        else:
+            x = self.patch_embed(x)
+
+            # assert mask is not None
+            B, L, _ = x.shape
+
+            # mask_token = self.mask_token.expand(B, L, -1)
+            # mask = mask.repeat(1, self.mask_patch_size)
+            # w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+            # w = mask.unsqueeze(-1).type_as(mask_token)
+            # x = x * (1 - w) + mask_token * w
+
+            # result = x - mask_token*w
+            # 师哥的代码的cls_tokens
+            cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=B)  # stole cls_tokens impl from Phil Wang, thanks
+            x = torch.cat((cls_tokens, x), dim=1)
+
+            b, n, _ = x.shape
+
+            # if self.pos_embed is True:
+            x += self.pos_embedding[:, :(n + 1)]
+
+            # cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=b)
+            # x = torch.cat((cls_tokens, x), dim=1)
+
+            x = self.dropout(x)
+
+            x = self.attn_layers(x)
+            return x[:,0,:]
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'absolute_pos_embed'}
+
+    @torch.jit.ignore
+    def no_weight_decay_keywords(self):
+        return {'relative_position_bias_table'}
+
 
 def build_Dtransformer(config):
     # 师哥代码的参数
     # 总维度数？num_patches=dim？
     dim = config.DATA.DIM
     # 一个patch中的元素个数
-    patch_dim = 512  # 512
+    patch_dim = config.MODEL.Dtransformer.PATCH_DIM  # 512
     CLASS_NUM = config.DATA.CLASS_NUM
     model = DtransformerForSimMIM(
         in_chans=dim,
@@ -807,7 +914,29 @@ def build_Dtransformer(config):
         #
         patch_dim=patch_dim,
         image_size=5,
-        patch_size=5,
+        patch_size=config.MODEL.Dtransformer.PATCH_SIZE,
+        attn_layers=Encoder(
+            dim=patch_dim,
+            depth=config.MODEL.Dtransformer.DEPTH,
+            heads=2))
+    return model
+def build_Dtransformer_as_G(config):
+    # 师哥代码的参数
+    # 总维度数？num_patches=dim？
+    dim = config.DATA.DIM
+    # 一个patch中的元素个数
+    patch_dim = config.MODEL.Dtransformer.PATCH_DIM  # 512
+    CLASS_NUM = config.DATA.CLASS_NUM
+    model = Dtransformer_as_G(
+        in_chans=dim,
+        # patch_size= 0,
+        # sum of patches
+        num_patches=dim,
+        mask_patch_size=config.DATA.MASK_PATCH_SIZE,
+        #
+        patch_dim=patch_dim,
+        image_size=5,
+        patch_size=config.MODEL.Dtransformer.PATCH_SIZE,
         attn_layers=Encoder(
             dim=patch_dim,
             depth=config.MODEL.Dtransformer.DEPTH,

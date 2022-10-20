@@ -91,7 +91,7 @@ def main(config):
             config, is_pretrain=True)
     # 设置模型及优化器，不设置动态更新学习率了
     device = 'cpu' if on_mac else 'cuda'
-    finetune_epochs = 100
+    finetune_epochs = 20
     # device = 'cpu'
     pretrain_model = get_pretrain_model(config).to(device=device)
     finetune_model = get_finetune_G(config).to(device=device)
@@ -257,7 +257,7 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
         # Step A train all networks to minimize loss on source
         E_optim.zero_grad()
         C_optim.zero_grad()
-
+        temp_d = copy.deepcopy(pretrain_model.state_dict())
         output = E(data_all, pretrain_model)
         # 输出size是64 512
         output1 = C1(output)

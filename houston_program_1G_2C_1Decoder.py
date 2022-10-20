@@ -11,6 +11,7 @@ decoder + decoder:预训练 -> decoder+attention+2 Resclassifier : 微调，step
 import argparse
 import datetime
 import os
+import random
 import time
 import copy
 
@@ -22,13 +23,14 @@ from torch.autograd import Variable
 from torch.backends import cudnn
 from torch import optim, nn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from config import get_config
 from data import get_dataloader, get_virtual_dataloader, get_mask_dataloader
 from data.utils import get_tensor_dataset
 from logger import create_logger
 from lr_scheduler import build_scheduler, build_finetune_scheduler
-from model import get_pretrain_model, get_finetune_G
+from model import get_pretrain_model, get_finetune_G, get_G, get_decoder
 from model.Trans_BCDM_A.net_A import ResClassifier
 from model.Trans_BCDM_A.utils_A import cdd
 from optimizer import build_optimizer, build_optimizer_c
@@ -77,6 +79,17 @@ def parse_option():
 
     return args, config
 
+def seed_everything(seed):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+
+
+
 
 def main(config):
     # 获取数据
@@ -93,18 +106,19 @@ def main(config):
     device = 'cpu' if on_mac else 'cuda'
     finetune_epochs = 20
     # device = 'cpu'
-    pretrain_model = get_pretrain_model(config).to(device=device)
-    finetune_model = get_finetune_G(config).to(device=device)
+    G = get_G(config).to(device)
+    Decoder = get_decoder(config).to(device)
+    logger.info(str(G))
     C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     # optimizer
-    pretrain_optimizer = build_optimizer(config, pretrain_model, logger, is_pretrain=True)
-    finetune_optimizer = build_optimizer(config, finetune_model, logger, is_pretrain=False)
+    G_optimizer = build_optimizer(config, G, logger, is_pretrain=True)
+    Decoder_optimizer = build_optimizer(config, Decoder, logger, is_pretrain=True)
     C_optimizer = build_optimizer_c(C1, C2, config, logger)
     # scheduler
     sche_length = min(len(finetune_train_src_loader), len(finetune_train_tgt_loader))
-    pretrain_scheduler = build_scheduler(config, pretrain_optimizer, sche_length * 2)
-    finetune_scheduler = build_scheduler(config, finetune_optimizer, sche_length)
+    G_scheduler = build_scheduler(config, G_optimizer, sche_length)
+    Decoder_scheduler = build_scheduler(config, Decoder_optimizer, sche_length)
     C_scheduler = build_scheduler(config, C_optimizer, sche_length)
     logger.info("Start training")
     start_time = time.time()
@@ -113,13 +127,11 @@ def main(config):
     # #
     # A = np.zeros([nDataSet, CLASS_NUM])
     # K = np.zeros([nDataSet, 1])
-
-    seeds = [1330, 1220, 1336, 1337, 1334, 1236, 1226, 1235, 1228, 1229]
     for epoch in range(config.TRAIN.EPOCHS):
         # train
-        train_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
-                        finetune_train_tgt_loader, pretrain_optimizer, finetune_optimizer, C_optimizer,
-                        pretrain_scheduler, finetune_scheduler, C_scheduler, epoch)
+        train_one_epoch(config, G, Decoder, C1, C2, finetune_train_src_loader,
+                        finetune_train_tgt_loader, G_optimizer, Decoder_optimizer, C_optimizer,
+                        G_scheduler, Decoder_scheduler, C_scheduler, epoch)
         # # pretrain
         # pretrain_train_one_epoch(config, pretrain_model, data_loader_train, optimizer_pretrain, epoch)
         # # finetune
@@ -127,41 +139,18 @@ def main(config):
         #                          finetune_train_tgt_loader, optimizer_finetune, optimizer_C, epoch)
         # # eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
         if (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            temp_finetune_optimizer = build_optimizer(config, finetune_model, logger, is_pretrain=False)
-            temp_C_optimizer = build_optimizer_c(C1, C2, config, logger)
-            temp_sche_length = min(len(finetune_train_src_loader), len(finetune_train_tgt_loader))
-            temp_finetune_scheduler = build_finetune_scheduler(config, temp_finetune_optimizer, temp_sche_length,
-                                                          ft_epochs=finetune_epochs)
-            temp_C_scheduler = build_finetune_scheduler(config, temp_C_optimizer, temp_sche_length, ft_epochs=finetune_epochs)
-            # 复制一下原始双分类器的值
-            E_state = copy.deepcopy(finetune_model.state_dict())
-            C1_state = copy.deepcopy(C1.state_dict())
-            C2_state = copy.deepcopy(C2.state_dict())
-            # eval
-            eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
-            # finetune
-            finetune_train_epochs(config,pretrain_model,finetune_model,C1,C2,finetune_train_src_loader,
-                                  finetune_train_tgt_loader,temp_finetune_optimizer,temp_C_optimizer,
-                                  temp_finetune_scheduler,temp_C_scheduler,
-                                  epoch,finetune_epochs)
-            # eval
-            eval_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_test_loader)
+            # eval on train dataset
+            eval_train(config,finetune_train_src_loader,finetune_train_tgt_loader,G,C1,C2,epoch)
+            # eval on test dataset
+            eval_one_epoch(config, G, C1, C2, finetune_test_loader,epoch)
 
-            # restore value
-            finetune_model.load_state_dict(E_state)
-            C1.load_state_dict(C1_state)
-            C2.load_state_dict(C2_state)
-            finetune_model.zero_grad()
-            pretrain_model.zero_grad()
-            C1.zero_grad()
-            C2.zero_grad()
             # save model
-            save_checkpoint(config, epoch, pretrain_model, finetune_model, C1, C2, 0., pretrain_optimizer,
-                            finetune_optimizer, C_optimizer, logger)
+            # save_checkpoint(config, epoch, pretrain_model, finetune_model, C1, C2, 0., pretrain_optimizer,
+            #                 finetune_optimizer, C_optimizer, logger)
 
 
-def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
-                    tgt_train_loader, pretrain_optim, E_optim, C_optim, pretrain_scheduler, finetune_scheduler,
+def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
+                    tgt_train_loader, G_optim, Decoder_optim, C_optim, G_scheduler, Decoder_scheduler,
                     C_scheduler, epoch):
     # 需要更换样本吗
     if on_mac:
@@ -169,8 +158,8 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
     else:
         criterion = nn.CrossEntropyLoss().cuda()
     eta = 0.01
-    pretrain_model.eval()
-    E.train()
+    G.train()
+    Decoder.train()
     C1.train()
     C2.train()
     finetune_step = min(len(src_train_loader), len(tgt_train_loader))
@@ -188,8 +177,9 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
         for s, t in [[data_s, data_t], [mask_s, mask_t], [label_s, label_t]]:
             s_1, s_2 = s.chunk(2, 0)
             t_1, t_2 = t.chunk(2, 0)
-            data_loader[0].append(torch.cat((s_1, t_2)))
-            data_loader[1].append(torch.cat((t_1, s_2)))
+            data_loader[0].append(Variable(torch.cat((s_1, t_2))))
+            data_loader[1].append(Variable(torch.cat((t_1, s_2))))
+
         if not on_mac:
             data_s, mask_s, label_s = data_s.cuda(), mask_s.cuda(), label_s.cuda()
             data_t, mask_t, label_t = data_t.cuda(), mask_t.cuda(), label_t.cuda()
@@ -198,67 +188,13 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
         label_s = label_s.long()
         label_s = Variable(label_s)
         bs = len(label_s)
-        '''' refactor '''
-        pretrain_model.train()
-        pretrain_optim.zero_grad()
-
-        num_steps = len(data_loader)
-        batch_time = AverageMeter()
-        loss_meter = AverageMeter()
-        norm_meter = AverageMeter()
-
-        start = time.time()
-        end = time.time()
-        # index_count = 0
-        for idx, (img, mask, _) in enumerate(data_loader):
-            # index_count += 1
-            # non-blocking 不会堵塞与其无关的的事情
-            # img size 128 192 192
-            # mask size 128 48 48
-            # 遮盖比率为0.75
-            if not on_mac:
-                img = img.cuda(non_blocking=True)
-                mask = mask.cuda(non_blocking=True)
-            # 从模型的结果得到一个loss
-            loss = pretrain_model(img, mask)
-            # 更新参数
-            loss.backward()
-            if config.TRAIN.CLIP_GRAD:
-                grad_norm = torch.nn.utils.clip_grad_norm_(pretrain_model.parameters(), config.TRAIN.CLIP_GRAD)
-            else:
-                grad_norm = get_grad_norm(pretrain_model.parameters())
-            pretrain_optim.step()
-            # lr_scheduler.step_update(epoch * num_steps + idx)
-            if not on_mac:
-                torch.cuda.synchronize()
-
-            loss_meter.update(loss.item(), img.size(0))
-            norm_meter.update(grad_norm)
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if idx % config.PRINT_FREQ == 0:
-                lr = pretrain_optim.param_groups[0]['lr']
-                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-                etas = batch_time.avg * (num_steps - idx)
-                logger.info(
-                    f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
-                    f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
-                    f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
-                    f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                    f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
-                    f'mem {memory_used:.0f}MB')
-            pretrain_scheduler.step_update(epoch * finetune_step * 2 + batch_idx * 2 + idx)
-        epoch_time = time.time() - start
-        # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
-        logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
 
         """source domain discriminative"""
         # Step A train all networks to minimize loss on source
-        E_optim.zero_grad()
+        G_optim.zero_grad()
         C_optim.zero_grad()
-        temp_d = copy.deepcopy(pretrain_model.state_dict())
-        output = E(data_all, pretrain_model)
+        # temp_d = copy.deepcopy(pretrain_model.state_dict())
+        output = G(data_all, mask=None)
         # 输出size是64 512
         output1 = C1(output)
         output2 = C2(output)
@@ -275,15 +211,20 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
 
         all_loss = loss1 + loss2 + 0.01 * entropy_loss
         all_loss.backward()
-        E_optim.step()
+        G_optim.step()
         C_optim.step()
+        writer.add_scalar(tag='stepA_loss1',scalar_value=loss1,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepA_loss2', scalar_value=loss2,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepA_entropy', scalar_value=entropy_loss,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepA_all(0.01entropy)', scalar_value=all_loss,global_step=epoch*finetune_step+batch_idx)
+        logger.info(f'stepA_loss1:{loss1}\tstepA_loss2:{loss2}\tstepA_entropy:{entropy_loss}\tstepA_all(0.01entropy):{all_loss}')
 
         """target domain discriminative"""
         # Step B train classifier to maximize discrepancy
-        E_optim.zero_grad()
+        G_optim.zero_grad()
         C_optim.zero_grad()
 
-        output = E(data_all, pretrain_model)
+        output = G(data_all, mask=None)
         output1 = C1(output)
         output2 = C2(output)
         output_s1 = output1[:bs, :]
@@ -298,18 +239,81 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
         entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
         loss_dis = cdd(output_t1, output_t2)
-
         F_loss = loss1 + loss2 - eta * loss_dis + 0.01 * entropy_loss
+        writer.add_scalar(tag='stepB_loss1', scalar_value=loss1,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepB_loss2', scalar_value=loss2,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepB_entropy', scalar_value=entropy_loss,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepB_cdd', scalar_value=loss_dis,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepB_all', scalar_value=F_loss,global_step=epoch*finetune_step+batch_idx)
+        logger.info(f'stepB_loss1:{loss1}\tstepB_loss2:{loss2}\tstepB_entropy:{entropy_loss}\tstepB_cdd:{loss_dis}\tstepB_all:{F_loss}')
         F_loss.backward()
         C_optim.step()
 
         # Step C train genrator to minimize discrepancy
+        '''stepc: refactor'''
+        '''' refactor '''
+        G.train()
+        G_optim.zero_grad()
+
+        num_steps = len(data_loader)
+        batch_time = AverageMeter()
+        loss_meter = AverageMeter()
+        norm_meter = AverageMeter()
+
+        start = time.time()
+        end = time.time()
+        loss_refactor = 0
+        # index_count = 0
+        for idx, (img, mask, _) in enumerate(data_loader):
+            # index_count += 1
+            # non-blocking 不会堵塞与其无关的的事情
+            # img size 128 192 192
+            # mask size 128 48 48
+            # 遮盖比率为0.75
+            if not on_mac:
+                img = img.cuda(non_blocking=True)
+                mask = mask.cuda(non_blocking=True)
+            # 从模型的结果得到一个loss
+            G_feature = G(img, mask)
+            loss_refactor += Decoder(x=img, mask=mask, rec=G_feature)
+            # 更新参数
+            # loss_refactor.backward()
+            if config.TRAIN.CLIP_GRAD:
+                grad_norm = torch.nn.utils.clip_grad_norm_(G.parameters(), config.TRAIN.CLIP_GRAD)
+            else:
+                grad_norm = get_grad_norm(G.parameters())
+            # pretrain_optim.step()
+            # lr_scheduler.step_update(epoch * num_steps + idx)
+            if not on_mac:
+                torch.cuda.synchronize()
+
+            loss_meter.update(loss_refactor.item(), img.size(0))
+            norm_meter.update(grad_norm)
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+        lr = G_optim.param_groups[0]['lr']
+        memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+        # etas = batch_time.avg * (num_steps - idx)
+        logger.info(
+            f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
+            f'lr {lr:.6f}\t'
+            f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
+            f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+            f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
+            f'mem {memory_used:.0f}MB')
+        # pretrain_scheduler.step_update(epoch * finetune_step * 2 + batch_idx * 2 + idx)
+        # epoch_time = time.time() - start
+        # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
+        # logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
+        '''stepc train genrator to minimize discrepancy'''
         NUM_K = 4
+        D_loss = 0
         for i in range(NUM_K):
-            E.zero_grad()
+            G.zero_grad()
             C_optim.zero_grad()
 
-            output = E(data_all, pretrain_model)
+            output = G(data_all, mask=None)
             features_source = output[:bs, :]
             features_target = output[bs:, :]
             output1 = C1(output)
@@ -326,10 +330,18 @@ def train_one_epoch(config, pretrain_model, E, C1, C2, src_train_loader,
             loss_dis = cdd(output_t1, output_t2)
             D_loss = eta * loss_dis + 0.01 * entropy_loss
 
-            D_loss.backward()
-            E_optim.step()
+        # D_loss.backward()
+        step_3_all_loss = D_loss + loss_refactor
+        writer.add_scalar(tag='stepC_D_loss', scalar_value=D_loss,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepC_refactor_loss', scalar_value=loss_refactor,global_step=epoch*finetune_step+batch_idx)
+        writer.add_scalar(tag='stepC_all_loss', scalar_value=step_3_all_loss,global_step=epoch*finetune_step+batch_idx)
+        logger.info(f'stepC_D_loss:{D_loss}\tstepC_refactor_loss:{loss_refactor}\tstepC_all_loss:{step_3_all_loss}')
+        step_3_all_loss.backward()
+        G_optim.step()
+        C_optim.step()
         # scheduler step up
-        finetune_scheduler.step_update(epoch * finetune_step + batch_idx)
+        G_scheduler.step_update(epoch * finetune_step + batch_idx)
+        Decoder_scheduler.step_update(epoch * finetune_step + batch_idx)
         C_scheduler.step_update(epoch * finetune_step + batch_idx)
     logger.info('Train Ep: {} \tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f} '.format(
         epoch, loss1.item(), loss2.item(), loss_dis.item(), entropy_loss.item()))
@@ -389,10 +401,12 @@ def pretrain_train_one_epoch(config, model, data_loader, optimizer, epoch):
                 f'mem {memory_used:.0f}MB')
     epoch_time = time.time() - start
     # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
+
     logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
 
 
-def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, finetune_scheduler, C_scheduler,
+def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim,
+                          finetune_scheduler, C_scheduler,
                           epoch, finetune_epochs):
     # 需要更换样本吗
     if on_mac:
@@ -511,12 +525,15 @@ def finetune_train_epochs(config, pretrain_model, E, C1, C2, src_train_loader, t
         C_lr_2 = C_optim.param_groups[1]['lr']
         C_lr_3 = C_optim.param_groups[2]['lr']
         C_lr_4 = C_optim.param_groups[3]['lr']
-        logger.info('E_lr_1: {:.6f}\t E_lr_2:{:.6f}'.format(E_lr_1,E_lr_2))
-        logger.info('C_lr_1: {:.6f}\t C_lr_2:{:.6f}\t C_lr_3:{:.6f}\t C_lr_4:{:.6f}'.format(C_lr_1, C_lr_2, C_lr_3, C_lr_4))
+        logger.info('E_lr_1: {:.6f}\t E_lr_2:{:.6f}'.format(E_lr_1, E_lr_2))
+        logger.info(
+            'C_lr_1: {:.6f}\t C_lr_2:{:.6f}\t C_lr_3:{:.6f}\t C_lr_4:{:.6f}'.format(C_lr_1, C_lr_2, C_lr_3, C_lr_4))
     time_end_per_epoch = time.time()
     logger.info(f'time_{epoch}_epoch:{(time_end_per_epoch - time_start_per_epoch)}')
 
-def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim, C_optim, epoch, finetune_epochs):
+
+def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_loader, tgt_train_loader, E_optim,
+                                  C_optim, epoch, finetune_epochs):
     finetune_optimizer = build_optimizer(config, E, logger, is_pretrain=False)
     C_optimizer = build_optimizer_c(C1, C2, config, logger)
     sche_length = min(len(src_train_loader), len(tgt_train_loader))
@@ -643,9 +660,46 @@ def finetune_train_epochs_restore(config, pretrain_model, E, C1, C2, src_train_l
     pretrain_model.load_state_dict(pretrain_model_state)
     E.load_state_dict(E_state)
 
-def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
-    pretrain_model.eval()
-    E.eval()
+def eval_train(config, finetune_train_src_loader, finetune_train_tgt_loader, G, C1, C2,epoch):
+    G.eval()
+    C1.eval()
+    C2.eval()
+    val_pred_all = []
+    val_all = []
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, data in enumerate(zip(finetune_train_src_loader, finetune_train_tgt_loader)):
+            (data_s, mask_s, label_s), (data_t, mask_t, label_t) = data
+            if not on_mac:
+                data_s,data_t,label_s,label_t = data_s.cuda(),data_t.cuda(),label_s.cuda(),label_t.cuda()
+            output_s = G(data_s, mask=None)
+            output_t = G(data_t, mask=None)
+            output_s_1 = C1(output_s)
+            output_s_2 = C2(output_s)
+            output_t_1 = C1(output_t)
+            output_t_2 = C2(output_t)
+            output_s_add = output_s_1 + output_s_2
+            output_t_add = output_t_1 + output_t_2
+            _, predicted_s = torch.max(output_s_add.data, 1)
+            _, predicted_t = torch.max(output_t_add.data, 1)
+            total += label_s.size(0)+label_t.size(0)
+            val_all = np.concatenate([val_all, label_s.data.cpu().numpy(),label_t.data.cpu().numpy()])
+            val_pred_all = np.concatenate([val_pred_all, predicted_s.cpu().numpy(),predicted_t.cpu().numpy()])
+            correct += predicted_s.eq(label_s.data.view_as(predicted_s)).cpu().sum().item()
+            correct += predicted_t.eq(label_t.data.view_as(predicted_t)).cpu().sum().item()
+        test_accuracy = 100. * correct / total
+
+        # acc[iDataSet] = test_accuracy
+        # # OA = acc
+        # C = metrics.confusion_matrix(val_all, val_pred_all)
+        # A[iDataSet, :] = np.diag(C) / np.sum(C, 1, dtype=np.float)
+        # K[iDataSet] = metrics.cohen_kappa_score(val_all, val_pred_all)
+        writer.add_scalar(tag='train_acc',scalar_value=100. * correct / total,global_step=epoch)
+        logger.info('\ttrain dataset Accuracy: {}/{} ({:.2f}%)\t'.format(correct, total, 100. * correct / total))
+
+def eval_one_epoch(config, G, C1, C2, test_loader,epoch):
+    G.eval()
     C1.eval()
     C2.eval()
     val_pred_all = []
@@ -656,7 +710,8 @@ def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
         for batch_idx, (valX, maskX, valY) in enumerate(test_loader):
             if not on_mac:
                 valX, valY = valX.cuda(), valY.cuda()
-            output = E(valX, pretrain_model)
+
+            output = G(valX,mask=None)
             output1 = C1(output)
             output2 = C2(output)
             output_add = output1 + output2
@@ -672,12 +727,13 @@ def eval_one_epoch(config, pretrain_model, E, C1, C2, test_loader):
         # C = metrics.confusion_matrix(val_all, val_pred_all)
         # A[iDataSet, :] = np.diag(C) / np.sum(C, 1, dtype=np.float)
         # K[iDataSet] = metrics.cohen_kappa_score(val_all, val_pred_all)
+        writer.add_scalar(tag='test_acc', scalar_value=100. * correct / total,global_step=epoch)
         logger.info('\tval_Accuracy: {}/{} ({:.2f}%)\t'.format(correct, total, 100. * correct / total))
 
 
 if __name__ == '__main__':
     _, config = parse_option()
-    on_mac = False
+    on_mac = False if torch.cuda.is_available() else False
 
     # C:/ProgramData/Anaconda3/envs/CGDM/Lib/site-packages/apex/amp/_amp_state.py 修改了调用问题
 
@@ -698,9 +754,9 @@ if __name__ == '__main__':
         torch.cuda.set_device(config.LOCAL_RANK)
     else:
         torch.cuda.set_device(config.LOCAL_RANK)
-    seed = config.SEED
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    # seed = config.SEED
+    # torch.manual_seed(seed)
+    # np.random.seed(seed)
     cudnn.benchmark = True
     # linear scale the learning rate according to total batch size, may not be optimal
     linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE / 512.0
@@ -730,4 +786,9 @@ if __name__ == '__main__':
 
     # print config
     logger.info(config.dump())
-    main(config)
+    seeds = [1330, 1220, 1336, 1337, 1334, 1236, 1226, 1235, 1228, 1229]
+    for i in range(len(seeds)):
+        writer = SummaryWriter(log_dir=config.OUTPUT+'/'+config.TAG+'_seed'+str(seeds[i]))
+        logger.info(f'seed:{seeds[i]}')
+        seed_everything(seeds[i])
+        main(config)
