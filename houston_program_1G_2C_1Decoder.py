@@ -250,11 +250,9 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
         C_optim.step()
 
         # Step C train genrator to minimize discrepancy
-        '''stepc: refactor'''
-        '''' refactor '''
-        G.train()
-        G_optim.zero_grad()
 
+        '''stepc train genrator to minimize discrepancy'''
+        NUM_K = 4
         num_steps = len(data_loader)
         batch_time = AverageMeter()
         loss_meter = AverageMeter()
@@ -262,54 +260,44 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
 
         start = time.time()
         end = time.time()
-        loss_refactor = 0
-        # index_count = 0
-        for idx, (img, mask, _) in enumerate(data_loader):
-            # index_count += 1
-            # non-blocking 不会堵塞与其无关的的事情
-            # img size 128 192 192
-            # mask size 128 48 48
-            # 遮盖比率为0.75
-            if not on_mac:
-                img = img.cuda(non_blocking=True)
-                mask = mask.cuda(non_blocking=True)
-            # 从模型的结果得到一个loss
-            G_feature = G(img, mask)
-            loss_refactor += Decoder(x=img, mask=mask, rec=G_feature)
-            # 更新参数
-            # loss_refactor.backward()
-            if config.TRAIN.CLIP_GRAD:
-                grad_norm = torch.nn.utils.clip_grad_norm_(G.parameters(), config.TRAIN.CLIP_GRAD)
-            else:
-                grad_norm = get_grad_norm(G.parameters())
-            # pretrain_optim.step()
-            # lr_scheduler.step_update(epoch * num_steps + idx)
-            if not on_mac:
-                torch.cuda.synchronize()
-
-            loss_meter.update(loss_refactor.item(), img.size(0))
-            norm_meter.update(grad_norm)
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-        lr = G_optim.param_groups[0]['lr']
-        memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-        # etas = batch_time.avg * (num_steps - idx)
-        logger.info(
-            f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
-            f'lr {lr:.6f}\t'
-            f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
-            f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-            f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
-            f'mem {memory_used:.0f}MB')
-        # pretrain_scheduler.step_update(epoch * finetune_step * 2 + batch_idx * 2 + idx)
-        # epoch_time = time.time() - start
-        # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
-        # logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
-        '''stepc train genrator to minimize discrepancy'''
-        NUM_K = 4
-        D_loss = 0
         for i in range(NUM_K):
+            ''' refactor'''
+            G.train()
+            G_optim.zero_grad()
+            # index_count = 0
+            for idx, (img, mask, _) in enumerate(data_loader):
+                # index_count += 1
+                # non-blocking 不会堵塞与其无关的的事情
+                # img size 128 192 192
+                # mask size 128 48 48
+                # 遮盖比率为0.75
+                if not on_mac:
+                    img = img.cuda(non_blocking=True)
+                    mask = mask.cuda(non_blocking=True)
+                # 从模型的结果得到一个loss
+                G_feature = G(img, mask)
+                loss_refactor = Decoder(x=img, mask=mask, rec=G_feature)
+                # 更新参数
+                # loss_refactor.backward()
+                if config.TRAIN.CLIP_GRAD:
+                    grad_norm = torch.nn.utils.clip_grad_norm_(G.parameters(), config.TRAIN.CLIP_GRAD)
+                else:
+                    grad_norm = get_grad_norm(G.parameters())
+                # pretrain_optim.step()
+                # lr_scheduler.step_update(epoch * num_steps + idx)
+                if not on_mac:
+                    torch.cuda.synchronize()
+
+                loss_meter.update(loss_refactor.item(), img.size(0))
+                norm_meter.update(grad_norm)
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+
+            # pretrain_scheduler.step_update(epoch * finetune_step * 2 + batch_idx * 2 + idx)
+            # epoch_time = time.time() - start
+            # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
+            # logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
             G.zero_grad()
             C_optim.zero_grad()
 
@@ -329,16 +317,27 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
             entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
             loss_dis = cdd(output_t1, output_t2)
             D_loss = eta * loss_dis + 0.01 * entropy_loss
-
+            step_3_all_loss = D_loss + loss_refactor
+            writer.add_scalar(tag='stepC_D_loss', scalar_value=D_loss, global_step=epoch * finetune_step + batch_idx*NUM_K+i)
+            writer.add_scalar(tag='stepC_refactor_loss', scalar_value=loss_refactor,
+                              global_step=epoch * finetune_step + batch_idx*NUM_K+i)
+            writer.add_scalar(tag='stepC_all_loss', scalar_value=step_3_all_loss,
+                              global_step=epoch * finetune_step + batch_idx*NUM_K+i)
+            logger.info(f'stepC_D_loss:{D_loss}\tstepC_refactor_loss:{loss_refactor}\tstepC_all_loss:{step_3_all_loss}')
+            step_3_all_loss.backward()
+            G_optim.step()
+            C_optim.step()
+        lr = G_optim.param_groups[0]['lr']
+        memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+        # etas = batch_time.avg * (num_steps - idx)
+        logger.info(
+            f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{batch_idx}/{finetune_step}]\t'
+            f'lr {lr:.6f}\t'
+            f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
+            f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+            f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
+            f'mem {memory_used:.0f}MB')
         # D_loss.backward()
-        step_3_all_loss = D_loss + loss_refactor
-        writer.add_scalar(tag='stepC_D_loss', scalar_value=D_loss,global_step=epoch*finetune_step+batch_idx)
-        writer.add_scalar(tag='stepC_refactor_loss', scalar_value=loss_refactor,global_step=epoch*finetune_step+batch_idx)
-        writer.add_scalar(tag='stepC_all_loss', scalar_value=step_3_all_loss,global_step=epoch*finetune_step+batch_idx)
-        logger.info(f'stepC_D_loss:{D_loss}\tstepC_refactor_loss:{loss_refactor}\tstepC_all_loss:{step_3_all_loss}')
-        step_3_all_loss.backward()
-        G_optim.step()
-        C_optim.step()
         # scheduler step up
         G_scheduler.step_update(epoch * finetune_step + batch_idx)
         Decoder_scheduler.step_update(epoch * finetune_step + batch_idx)
