@@ -1,6 +1,6 @@
 MODEL:
   TYPE: Dtransformer
-  NAME: demo
+  NAME: analyze
   DROP_PATH_RATE: 0.2
   Dtransformer:
     EMBED_DIM: 128

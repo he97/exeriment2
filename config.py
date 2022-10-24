@@ -177,6 +177,8 @@ _C.TRAIN.ACCUMULATION_STEPS = 0
 # Whether to use gradient checkpointing to save memory
 # could be overwritten by command line argument
 _C.TRAIN.USE_CHECKPOINT = False
+#
+_C.TRAIN.ETA = 0.01
 
 # LR scheduler
 _C.TRAIN.LR_SCHEDULER = CN()
