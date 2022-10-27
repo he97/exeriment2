@@ -10,8 +10,8 @@ class HsiMaskGenerator:
         self.in_channel = in_channel
         assert in_channel % mask_patch_size == 0, 'in_channel not match mask_patch_size'
         self.mask_patch_size = mask_patch_size
-        self.mask_patch_count = self.in_channel // self.mask_patch_size
-        self.mask_count = int(np.ceil(self.mask_patch_count * self.mask_ratio))
+        self.patch_count = self.in_channel // self.mask_patch_size
+        self.mask_count = int(np.ceil(self.patch_count * self.mask_ratio))
 
     #     def __init__(self, input_size=192, mask_patch_size=32, model_patch_size=4, mask_ratio=0.6):
     #         self.input_size = input_size
@@ -30,9 +30,9 @@ class HsiMaskGenerator:
     #         # 有多少个mask的区域
     #         self.mask_count = int(np.ceil(self.token_count * self.mask_ratio))
     def __call__(self):
-        mask_idx = np.random.permutation(self.mask_patch_count)[:self.mask_count]
+        mask_idx = np.random.permutation(self.patch_count)[:self.mask_count]
         # 建立一个所有token的零数组
-        mask = np.zeros(self.mask_patch_count, dtype=int)
+        mask = np.zeros(self.patch_count, dtype=int)
         # 被选取中的mask区域置1
         mask[mask_idx] = 1
         # mask = mask.transpose()

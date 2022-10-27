@@ -68,6 +68,8 @@ def parse_option():
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
     # eta
     parser.add_argument("--eta", type=float, required=True, help='eta of entropy')
+    # mask_ratio
+    parser.add_argument("--mask-ratio", type=float, required=True, help='mask ratio')
     # 解析参数
     args = parser.parse_args()
     # 得到yacs cfgNOde，值是原有的值
@@ -481,6 +483,12 @@ if __name__ == '__main__':
     # print config
     logger.info(config.dump())
     seeds = [1330, 1220, 1336, 1337, 1334, 1236, 1226, 1235, 1228, 1229]
+    nDataSet = len(seeds)
+    # 0的数组，size：10 1
+    acc = np.zeros([nDataSet, 1])
+    #
+    A = np.zeros([nDataSet, config.DATA.CLASS_NUM])
+    K = np.zeros([nDataSet, 1])
     for i in range(len(seeds)):
         writer = SummaryWriter(log_dir=config.OUTPUT+'/'+config.TAG+'_seed'+str(seeds[i]))
         logger.info(f'seed:{seeds[i]}')

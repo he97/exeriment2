@@ -177,8 +177,10 @@ _C.TRAIN.ACCUMULATION_STEPS = 0
 # Whether to use gradient checkpointing to save memory
 # could be overwritten by command line argument
 _C.TRAIN.USE_CHECKPOINT = False
-#
+# punish item * eta
 _C.TRAIN.ETA = 0.01
+# refactor loss item * eta
+_C.TRAIN.RF_ETA = 1
 
 # LR scheduler
 _C.TRAIN.LR_SCHEDULER = CN()
@@ -292,6 +294,10 @@ def update_config(config, args):
         if hasattr(args, name) and eval(f'args.{name}'):
             return True
         return False
+    def _check_args_without_eval(name):
+        if hasattr(args, name):
+            return True
+        return False
 
     # merge from specific arguments
     if _check_args('batch_size'):
@@ -328,6 +334,12 @@ def update_config(config, args):
         config.IS_DIST = args.is_dist
     if _check_args('is_hsi'):
         config.IS_HSI = args.is_HSI
+    if _check_args('eta'):
+        config.TRAIN.ETA = args.eta
+    if _check_args_without_eval('mask_ratio'):
+        config.DATA.MASK_RATIO = args.mask_ratio
+    if _check_args_without_eval("refactor_eta"):
+        config.TRAIN.RF_ETA = args.refactor_eta
 
 
     # set local rank for distributed training

@@ -68,6 +68,10 @@ def parse_option():
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
     # eta
     parser.add_argument("--eta", type=float, required=True, help='eta of entropy')
+    # mask_ratio
+    parser.add_argument("--mask-ratio", type=float, required=True, help='mask ratio')
+    # refactor_eta
+    parser.add_argument("--refactor-eta", type=float, required=True, help='eta of refactor loss')
     # 解析参数
     args = parser.parse_args()
     # 得到yacs cfgNOde，值是原有的值
@@ -155,6 +159,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
     else:
         criterion = nn.CrossEntropyLoss().cuda()
     eta = config.TRAIN.ETA
+    rf_eta = config.TRAIN.RF_ETA
     G.train()
     Decoder.train()
     C1.train()
@@ -264,7 +269,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
             G.train()
             G_optim.zero_grad()
             # index_count = 0
-            loss_refactor = 0.0
+            refactor_loss = 0.0
             for idx, (img, mask, _) in enumerate(data_loader):
                 # index_count += 1
                 # non-blocking 不会堵塞与其无关的的事情
@@ -276,7 +281,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
                     mask = mask.cuda(non_blocking=True)
                 # 从模型的结果得到一个loss
                 G_feature = G(img, mask)
-                loss_refactor = Decoder(x=img, mask=mask, rec=G_feature)
+                refactor_loss = Decoder(x=img, mask=mask, rec=G_feature)
                 # 更新参数
                 # loss_refactor.backward()
                 if config.TRAIN.CLIP_GRAD:
@@ -288,7 +293,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
                 if not on_mac:
                     torch.cuda.synchronize()
 
-                loss_meter.update(loss_refactor.item(), img.size(0))
+                loss_meter.update(refactor_loss.item(), img.size(0))
                 norm_meter.update(grad_norm)
                 batch_time.update(time.time() - end)
                 end = time.time()
@@ -318,15 +323,15 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
             loss_dis = cdd(output_t1, output_t2)
             # D_loss = eta * loss_dis + 0.01 * entropy_loss
             D_loss = eta * loss_dis
-            step_3_all_loss = D_loss + loss_refactor
+            step_3_all_loss = D_loss + rf_eta * refactor_loss
             writer.add_scalar(tag='stepC_CDD_loss', scalar_value=loss_dis, global_step=epoch * finetune_step*NUM_K + batch_idx*NUM_K+i)
             # writer.add_scalar(tag='stepC_D_loss', scalar_value=D_loss,
             #                   global_step=epoch * finetune_step + batch_idx * NUM_K + i)
-            writer.add_scalar(tag='stepC_refactor_loss', scalar_value=loss_refactor,
+            writer.add_scalar(tag='stepC_refactor_loss', scalar_value=rf_eta * refactor_loss,
                               global_step=epoch * finetune_step*NUM_K + batch_idx*NUM_K+i)
             writer.add_scalar(tag='stepC_all_loss', scalar_value=step_3_all_loss,
                               global_step=epoch * finetune_step*NUM_K + batch_idx*NUM_K+i)
-            logger.info(f'stepC_D_loss:{D_loss}\tstepC_refactor_loss:{loss_refactor}\tstepC_all_loss:{step_3_all_loss}')
+            logger.info(f'stepC_D_loss:{D_loss}\tstepC_refactor_loss:{refactor_loss}\tstepC_all_loss:{step_3_all_loss}')
             step_3_all_loss.backward()
             G_optim.step()
             C_optim.step()
@@ -481,6 +486,12 @@ if __name__ == '__main__':
     # print config
     logger.info(config.dump())
     seeds = [1330, 1220, 1336, 1337, 1334, 1236, 1226, 1235, 1228, 1229]
+    nDataSet = len(seeds)
+    # 0的数组，size：10 1
+    acc = np.zeros([nDataSet, 1])
+    #
+    A = np.zeros([nDataSet, config.DATA.CLASS_NUM])
+    K = np.zeros([nDataSet, 1])
     for i in range(len(seeds)):
         writer = SummaryWriter(log_dir=config.OUTPUT+'/'+config.TAG+'_seed'+str(seeds[i]))
         logger.info(f'seed:{seeds[i]}')
