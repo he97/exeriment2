@@ -150,3 +150,17 @@ class ViT(nn.Module):
 
         # MLP classification layer
         return self.mlp_head(x)
+a = ViT(
+    image_size = 5,
+    near_band = 48,
+    num_patches = 58,
+    num_classes = 7,
+    dim = 64,
+    depth = 5,
+    heads = 4,
+    mlp_dim = 8,
+    dropout = 0.1,
+    emb_dropout = 0.1,
+    mode = "VIT"
+)
+print('')
