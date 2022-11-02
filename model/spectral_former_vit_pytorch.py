@@ -1,3 +1,4 @@
+import numpy
 import torch
 import torch.nn as nn
 import numpy as np
@@ -43,7 +44,7 @@ class Attention(nn.Module):
             nn.Linear(inner_dim, dim),
             nn.Dropout(dropout)
         )
-    def forward(self, x, mask = None):
+    def forward(self, x):
         # x:[b,n,dim]
         b, n, _, h = *x.shape, self.heads
 
@@ -56,13 +57,6 @@ class Attention(nn.Module):
         dots = torch.einsum('bhid,bhjd->bhij', q, k) * self.scale
         mask_value = -torch.finfo(dots.dtype).max
 
-        # mask value: -inf
-        if mask is not None:
-            mask = F.pad(mask.flatten(1), (1, 0), value = True)
-            assert mask.shape[-1] == dots.shape[-1], 'mask has incorrect dimensions'
-            mask = mask[:, None, :] * mask[:, :, None]
-            dots.masked_fill_(~mask, mask_value)
-            del mask
 
         # softmax normalization -> attention matrix
         attn = dots.softmax(dim=-1)
@@ -89,10 +83,10 @@ class Transformer(nn.Module):
         for _ in range(depth-2):
             self.skipcat.append(nn.Conv2d(num_channel+1, num_channel+1, [1, 2], 1, 0))
 
-    def forward(self, x, mask = None):
+    def forward(self, x):
         if self.mode == 'ViT':
             for attn, ff in self.layers:
-                x = attn(x, mask = mask)
+                x = attn(x)
                 x = ff(x)
         elif self.mode == 'CAF':
             last_output = []
@@ -101,7 +95,7 @@ class Transformer(nn.Module):
                 last_output.append(x)
                 if nl > 1:             
                     x = self.skipcat[nl-2](torch.cat([x.unsqueeze(3), last_output[nl-2].unsqueeze(3)], dim=3)).squeeze(3)
-                x = attn(x, mask = mask)
+                x = attn(x)
                 x = ff(x)
                 nl += 1
 
@@ -150,17 +144,108 @@ class ViT(nn.Module):
 
         # MLP classification layer
         return self.mlp_head(x)
-a = ViT(
-    image_size = 5,
-    near_band = 48,
-    num_patches = 58,
-    num_classes = 7,
-    dim = 64,
-    depth = 5,
-    heads = 4,
-    mlp_dim = 8,
-    dropout = 0.1,
-    emb_dropout = 0.1,
-    mode = "VIT"
-)
-print('')
+
+"""
+not ok
+"""
+class spectral_former_vit(nn.Module):
+    def __init__(self, patch_size, group_size, num_patches, dim, depth, heads, mlp_dim, pool='cls',
+                 channels=1, dim_head=16, dropout=0., emb_dropout=0., mode='ViT'):
+        """
+        :param patch_size: patch_size default 5。 5*5*48
+        :param group_size: default 4
+        :param num_patches:
+        :param dim: feature
+        :param depth:
+        :param heads:
+        :param mlp_dim:
+        :param pool: no work
+        :param channels:
+        :param dim_head: head in transformer mlp
+        :param dropout:
+        :param emb_dropout:
+        :param mode:
+        """
+        super().__init__()
+
+        patch_dim = patch_size ** 2 * group_size
+
+        self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
+        self.patch_to_embedding = nn.Linear(patch_dim, dim)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+
+        self.dropout = nn.Dropout(emb_dropout)
+        self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout, num_patches, mode)
+
+        self.pool = pool
+        self.to_latent = nn.Identity()
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, dim))
+
+        # self.mlp_head = nn.Sequential(
+        #     nn.LayerNorm(dim),
+        #     nn.Linear(dim, num_classes)
+        # )
+
+    def forward(self, x, mask=None):
+        has_mask = True if mask is not None else False
+        if mask is None:
+            B, L, _ = x.shape
+            mask = torch.zeros((B,L))
+        # patchs[batch, patch_num, patch_size*patch_size*c]  [batch,200,145*145]
+        # x = rearrange(x, 'b c h w -> b c (h w)')
+
+        ## embedding every patch vector to embedding size: [batch, patch_num, embedding_size]
+        x = self.patch_to_embedding(x)  # [b,n,dim]
+        assert mask is not None
+        B, L, _ = x.shape
+
+        mask_token = self.mask_token.expand(B, L, -1)
+        w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+        x = x * (1 - w) + mask_token * w
+        b, n, _ = x.shape
+
+        # add position embedding
+        cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=b)  # [b,1,dim]
+        x = torch.cat((cls_tokens, x), dim=1)  # [b,n+1,dim]
+        x += self.pos_embedding[:, :(n + 1)]
+        x = self.dropout(x)
+
+        # transformer: x[b,n + 1,dim] -> x[b,n + 1,dim]
+        x = self.transformer(x)
+        if has_mask:
+            x = self.to_latent(x[:, 1:])
+        else:
+            x = self.to_latent(x[:, 0])
+        return x
+
+def build_spectral_former(config):
+    assert config.DATA.CHANNEL_DIM % config.DATA.MASK_PATCH_SIZE == 0, 'can not change to group'
+    num_groups = config.DATA.CHANNEL_DIM // config.DATA.MASK_PATCH_SIZE
+    model = spectral_former_vit(
+                    patch_size = config.DATA.PATCH_SIZE,
+                    group_size = config.DATA.MASK_PATCH_SIZE,
+                    num_patches = num_groups,
+                    dim = config.DATA.PATCH_DIM,
+                    depth = config.MODEL.SPECTRAL_FORMER.DEPTH,
+                    dim_head= 32,
+                    heads = 8,
+                    mlp_dim = 128,
+                    dropout = 0.1,
+                    emb_dropout = 0.1,
+                    mode = "CAF")
+    return model
+if __name__ == "__main__":
+    a = ViT(
+        image_size = 5,
+        near_band = 4,
+        num_patches = 58,
+        num_classes = 7,
+        dim = 512,
+        depth = 5,
+        heads = 4,
+        mlp_dim = 8,
+        dropout = 0.1,
+        emb_dropout = 0.1,
+        mode = "ViT"
+    )
+    print('')

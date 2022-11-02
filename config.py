@@ -53,6 +53,7 @@ _C.DATA.PATCH_DIM = 512
 # Batch size for a single GPU, could be overwritten by command line argument
 _C.DATA.BATCH_SIZE = 32
 # Path to dataset, could be overwritten by command line argument
+_C.DATA.PATCH_SIZE = 5
 _C.DATA.DATA_PATH = ''
 _C.DATA.DATA_SOURCE_PATH = ''
 _C.DATA.DATA_TARGET_PATH = ''
@@ -145,6 +146,39 @@ _C.MODEL.Dtransformer.APE = False
 _C.MODEL.Dtransformer.PATCH_NORM = True
 _C.MODEL.Dtransformer.DEPTH = 3
 _C.MODEL.Dtransformer.PATCH_DIM = 512
+
+# SPECTRAL_FORMER Transformer parameters
+_C.MODEL.SPECTRAL_FORMER = CN()
+_C.MODEL.SPECTRAL_FORMER.PATCH_SIZE = 5
+_C.MODEL.SPECTRAL_FORMER.IN_CHANS = 48
+_C.MODEL.SPECTRAL_FORMER.EMBED_DIM = 96
+_C.MODEL.SPECTRAL_FORMER.DEPTHS = [2, 2, 6, 2]
+_C.MODEL.SPECTRAL_FORMER.NUM_HEADS = [3, 6, 12, 24]
+_C.MODEL.SPECTRAL_FORMER.WINDOW_SIZE = 7
+_C.MODEL.SPECTRAL_FORMER.MLP_RATIO = 4.
+_C.MODEL.SPECTRAL_FORMER.QKV_BIAS = True
+_C.MODEL.SPECTRAL_FORMER.QK_SCALE = None
+_C.MODEL.SPECTRAL_FORMER.APE = False
+_C.MODEL.SPECTRAL_FORMER.PATCH_NORM = True
+_C.MODEL.SPECTRAL_FORMER.DEPTH = 3
+_C.MODEL.SPECTRAL_FORMER.PATCH_DIM = 512
+
+
+# SSFTTNET Transformer parameters
+_C.MODEL.SSFTTNET = CN()
+_C.MODEL.SSFTTNET.PATCH_SIZE = 5
+_C.MODEL.SSFTTNET.IN_CHANS = 48
+_C.MODEL.SSFTTNET.EMBED_DIM = 96
+_C.MODEL.SSFTTNET.DEPTHS = [2, 2, 6, 2]
+_C.MODEL.SSFTTNET.NUM_HEADS = [3, 6, 12, 24]
+_C.MODEL.SSFTTNET.WINDOW_SIZE = 7
+_C.MODEL.SSFTTNET.MLP_RATIO = 4.
+_C.MODEL.SSFTTNET.QKV_BIAS = True
+_C.MODEL.SSFTTNET.QK_SCALE = None
+_C.MODEL.SSFTTNET.APE = False
+_C.MODEL.SSFTTNET.PATCH_NORM = True
+_C.MODEL.SSFTTNET.DEPTH = 3
+_C.MODEL.SSFTTNET.PATCH_DIM = 512
 
 
 # -----------------------------------------------------------------------------
@@ -340,6 +374,16 @@ def update_config(config, args):
         config.DATA.MASK_RATIO = args.mask_ratio
     if _check_args_without_eval("refactor_eta"):
         config.TRAIN.RF_ETA = args.refactor_eta
+    if _check_args("attention_depth"):
+        type = config.MODEL.TYPE
+        if type == "SPECTRAL_FORMER":
+            # config.MODEL.eval(config.MODEL.TYPE).DEPTH = args.attention_depth
+            config.MODEL.SPECTRAL_FORMER.DEPTH = args.attention_depth
+        elif type == "Dtransformer":
+            config.MODEL.Dtransformer.DEPTH = args.attention_depth
+        else:
+            raise Exception(f"not support type:{type}")
+        # config.MODEL.eval(config.MODEL.TYPE).DEPTH = args.attention_depth
 
 
     # set local rank for distributed training

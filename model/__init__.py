@@ -1,5 +1,6 @@
 from torch import nn
 
+from model.SSFTTnet import build_SSFTTnet
 from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G
 from model.decoder import mask_decoder
 from model.encoder import VisionTransformerForDemo
@@ -7,6 +8,9 @@ from model.finetune_model import build_finetune_G
 from model.pretrain_model import build_model, SimMIMForHsi
 import math
 from functools import partial
+
+from model.spectral_former_vit_pytorch import build_spectral_former
+
 
 def get_pretrain_model(config):
     return build_model(config)
@@ -47,6 +51,11 @@ def get_G(config):
         encoder = build_Dtransformer_as_G(config)
         # encode_stride 是 patch的边长
         # encoder_stride = config.DATA.MASK_PATCH_SIZE
+    elif model_type == 'SPECTRAL_FORMER':
+        encoder = build_spectral_former(config)
+    elif model_type == 'SSFTTNET':
+        encoder = build_SSFTTnet(config)
+
     else:
         raise NotImplementedError(f"Unknown pre-train model: {model_type}")
     return encoder

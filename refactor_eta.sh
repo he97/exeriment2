@@ -1,7 +1,8 @@
 #etas=(0.05 0.1 0.2 0.4 0.5 0.75 0.9 1.0)
 #0.4:5,0.5:6,0.6:8,0.7:9,0.8:10,0.9:11
 #refactor_etas=(0.0 10 20 40 80 160)
-refactor_etas=(100 120 140)
+#refactor_etas=(100 120 140)
+refactor_etas=(60 500 1000 2000 5000 10000)
 mask_ratio=0.3
 #--cfg
 cfg="configs/Dtransformer/houston_analyze_refactor_eta.yaml"
