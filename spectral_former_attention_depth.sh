@@ -3,12 +3,12 @@
 #refactor_etas=(0.0 10 20 40 80 160)
 #refactor_etas=(100 120 140)
 #refactor_etas=(60 500 1000 2000 5000 10000)
-attention_depth=(1 2 4 8 10 12)
+attention_depth=(1 2 4 8 10)
 model_type="SPECTRAL_FORMER"
 refactor_eta=80
 mask_ratio=0.3
 #--cfg
-cfg="configs/spectral_former/houston.yaml"
+cfg="configs/spectral_former/houston_caf.yaml"
 #--batch-size
 batch_size="32"
 #--data-source-path
@@ -22,7 +22,7 @@ label_target_path="dataset/houston13-18/Houston18_7gt.mat"
 #--output
 output="outputs"
 #--tag
-tag="houston_analyze_eval_model"
+tag="houston_depth"
 #--local_rank
 local_rank=0
 #eta

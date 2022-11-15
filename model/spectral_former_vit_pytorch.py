@@ -98,6 +98,8 @@ class Transformer(nn.Module):
                 x = attn(x)
                 x = ff(x)
                 nl += 1
+        else:
+            raise Exception('mode is illegal')
 
         return x
 
@@ -228,11 +230,11 @@ def build_spectral_former(config):
                     dim = config.DATA.PATCH_DIM,
                     depth = config.MODEL.SPECTRAL_FORMER.DEPTH,
                     dim_head= 32,
-                    heads = 8,
-                    mlp_dim = 128,
+                    heads = 64,
+                    mlp_dim = 4096,
                     dropout = 0.1,
                     emb_dropout = 0.1,
-                    mode = "CAF")
+                    mode = config.MODEL.SPECTRAL_FORMER.MODE)
     return model
 if __name__ == "__main__":
     a = ViT(

@@ -25,7 +25,6 @@ from eval_method import get_eval_method
 from logger import create_logger
 from lr_scheduler import build_scheduler, build_finetune_scheduler
 from model import get_pretrain_model, get_finetune_G, get_G, get_decoder
-from model.C import AlterResClassifier
 from model.Trans_BCDM_A.net_A import ResClassifier
 from model.Trans_BCDM_A.utils_A import cdd
 from optimizer import build_optimizer, build_optimizer_c
@@ -114,9 +113,8 @@ def main(config):
     G = get_G(config).to(device)
     Decoder = get_decoder(config).to(device)
     logger.info(str(G))
-    C1 = AlterResClassifier(prob=0.5, num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
-    C2 = AlterResClassifier(prob=0.5, num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
-    logger.info(f'C1:{C1}')
+    C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
+    C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     # optimizer
     G_optimizer = build_optimizer(config, G, logger, is_pretrain=True)
     Decoder_optimizer = build_optimizer(config, Decoder, logger, is_pretrain=True)

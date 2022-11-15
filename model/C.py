@@ -27,14 +27,15 @@ class AlterResClassifier(nn.Module):
         fc11 = nn.Linear(num_unit, middle)
         self.fc11 = fc11
         layers1.append(fc11)
-        layers1.append(nn.BatchNorm1d(middle, affine=True))
+        # layers1.append(nn.BatchNorm1d(middle, affine=True))
         layers1.append(nn.LeakyReLU(inplace=True))
         # layers1.append(nn.Dropout(p=prob))
-        fc12 = nn.Linear(middle, middle)
-        self.fc12 = fc12
-        layers1.append(fc12)
+        # fc12 = nn.Linear(middle, middle)
+        # self.fc12 = fc12
+        # layers1.append(fc12)
         layers1.append(nn.BatchNorm1d(middle, affine=True))
-        layers1.append(nn.ReLU(inplace=True))
+        # layers1.append(nn.ReLU(inplace=True))
+        layers1.append(nn.Dropout(p=prob))
         fc13 = nn.Linear(middle, num_classes)
         self.fc13 = fc13
         layers1.append(fc13)
