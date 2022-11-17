@@ -1,6 +1,6 @@
 MODEL:
   TYPE: Dtransformer
-  NAME: eta_maskrt_refactor
+  NAME: remake
   DROP_PATH_RATE: 0.2
   Dtransformer:
     EMBED_DIM: 128

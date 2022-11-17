@@ -1,4 +1,4 @@
-etas=(0.01 0.03 0.05 0.1 0.2 0.4 0.5 0.75 0.9 1.0)
+etas=(0.01 0.03 0.05 0.1 0.2 0.4 0.5)
 #--cfg
 cfg="configs/Dtransformer/houston_eta_maskrt_refactor.yaml"
 #--batch-size

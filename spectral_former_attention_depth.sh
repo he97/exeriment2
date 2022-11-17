@@ -24,7 +24,7 @@ output="outputs"
 #--tag
 tag="houston_depth"
 #--local_rank
-local_rank=0
+local_rank=1
 #eta
 eta=0.01
 for depth in ${attention_depth[@]}; do

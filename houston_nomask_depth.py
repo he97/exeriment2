@@ -111,18 +111,18 @@ def main(config):
     finetune_epochs = 20
     # device = 'cpu'
     G = get_G(config).to(device)
-    Decoder = get_decoder(config).to(device)
+    # Decoder = get_decoder(config).to(device)
     logger.info(str(G))
     C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=512).to(device)
     # optimizer
     G_optimizer = build_optimizer(config, G, logger, is_pretrain=True)
-    Decoder_optimizer = build_optimizer(config, Decoder, logger, is_pretrain=True)
+    # Decoder_optimizer = build_optimizer(config, Decoder, logger, is_pretrain=True)
     C_optimizer = build_optimizer_c(C1, C2, config, logger)
     # scheduler
     sche_length = min(len(finetune_train_src_loader), len(finetune_train_tgt_loader))
     G_scheduler = build_scheduler(config, G_optimizer, sche_length)
-    Decoder_scheduler = build_scheduler(config, Decoder_optimizer, sche_length)
+    # Decoder_scheduler = build_scheduler(config, Decoder_optimizer, sche_length)
     C_scheduler = build_scheduler(config, C_optimizer, sche_length)
     logger.info("Start training")
     start_time = time.time()
@@ -153,8 +153,8 @@ def main(config):
             #                 finetune_optimizer, C_optimizer, logger)
 
 
-def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
-                    tgt_train_loader, G_optim, Decoder_optim, C_optim, G_scheduler, Decoder_scheduler,
+def train_one_epoch(config, G, C1, C2, src_train_loader,
+                    tgt_train_loader, G_optim, C_optim, G_scheduler,
                     C_scheduler, epoch):
     # 需要更换样本吗
     if on_mac:
@@ -164,7 +164,6 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
     eta = config.TRAIN.ETA
     rf_eta = config.TRAIN.RF_ETA
     G.train()
-    Decoder.train()
     C1.train()
     C2.train()
     finetune_step = min(len(src_train_loader), len(tgt_train_loader))
@@ -272,35 +271,34 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
             G.train()
             G_optim.zero_grad()
             # index_count = 0
-            refactor_loss = 0.0
-            for idx, (img, mask, _) in enumerate(data_loader):
-                # index_count += 1
-                # non-blocking 不会堵塞与其无关的的事情
-                # img size 128 192 192
-                # mask size 128 48 48
-                # 遮盖比率为0.75
-                if not on_mac:
-                    img = img.cuda(non_blocking=True)
-                    mask = mask.cuda(non_blocking=True)
-                # 从模型的结果得到一个loss
-                G_feature = G(img, mask)
-                refactor_loss = Decoder(x=img, mask=mask, rec=G_feature)
-                # 更新参数
-                # loss_refactor.backward()
-                if config.TRAIN.CLIP_GRAD:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(G.parameters(), config.TRAIN.CLIP_GRAD)
-                else:
-                    grad_norm = get_grad_norm(G.parameters())
-                # pretrain_optim.step()
-                # lr_scheduler.step_update(epoch * num_steps + idx)
-                if not on_mac:
-                    torch.cuda.synchronize()
-
-                loss_meter.update(refactor_loss.item(), img.size(0))
-                norm_meter.update(grad_norm)
-                batch_time.update(time.time() - end)
-                end = time.time()
-
+            # refactor_loss = 0.0
+            # for idx, (img, mask, _) in enumerate(data_loader):
+            #     # index_count += 1
+            #     # non-blocking 不会堵塞与其无关的的事情
+            #     # img size 128 192 192
+            #     # mask size 128 48 48
+            #     # 遮盖比率为0.75
+            #     if not on_mac:
+            #         img = img.cuda(non_blocking=True)
+            #         mask = mask.cuda(non_blocking=True)
+            #     # 从模型的结果得到一个loss
+            #     G_feature = G(img, mask)
+            #     # 更新参数
+            #     # loss_refactor.backward()
+            #     if config.TRAIN.CLIP_GRAD:
+            #         grad_norm = torch.nn.utils.clip_grad_norm_(G.parameters(), config.TRAIN.CLIP_GRAD)
+            #     else:
+            #         grad_norm = get_grad_norm(G.parameters())
+            #     # pretrain_optim.step()
+            #     # lr_scheduler.step_update(epoch * num_steps + idx)
+            #     if not on_mac:
+            #         torch.cuda.synchronize()
+            #
+            #     loss_meter.update(refactor_loss.item(), img.size(0))
+            #     norm_meter.update(grad_norm)
+            #     batch_time.update(time.time() - end)
+            #     end = time.time()
+            #
 
             # pretrain_scheduler.step_update(epoch * finetune_step * 2 + batch_idx * 2 + idx)
             # epoch_time = time.time() - start
