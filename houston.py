@@ -23,7 +23,7 @@ from torch import optim, nn
 from torch.utils.data import DataLoader
 
 from config import get_config
-from data import get_dataloader, get_virtual_dataloader, get_mask_dataloader
+from data import get_hsi_spectral_dataloader, get_virtual_dataloader, get_mask_dataloader
 from data.utils import get_tensor_dataset
 from logger import create_logger
 from model import get_pretrain_model, get_finetune_G
@@ -91,7 +91,7 @@ def main(config):
         finetune_test_loader = DataLoader(finetune_tgt_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True,
                                           num_workers=4)
     else:
-        data_loader_train, finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_dataloader(
+        data_loader_train, finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spectral_dataloader(
             config, is_pretrain=True)
     # 设置模型及优化器，不设置动态更新学习率了
     device = 'cpu' if on_mac else 'cuda'

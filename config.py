@@ -19,6 +19,9 @@ _C.BASE = ['']
 # Data settings
 # -----------------------------------------------------------------------------
 _C.DATA = CN()
+_C.DATA.SPATIAL = CN()
+_C.DATA.SPATIAL.HALF_WIDTH = 16
+_C.DATA.SPATIAL.PATCH_SIZE = 4
 # sum of epoch
 _C.DATA.EPOCHS = 80
     # epochs = 80
