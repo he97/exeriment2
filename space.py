@@ -19,7 +19,8 @@ from torch.utils.data import DataLoader
 
 from torch.utils.tensorboard import SummaryWriter
 from config import get_config
-from data import get_hsi_spectral_dataloader, get_virtual_dataloader, get_mask_dataloader, get_hsi_spatial_dataloader
+from data import get_hsi_spectral_dataloader, get_virtual_dataloader, get_mask_dataloader, get_hsi_spatial_dataloader, \
+    get_hsi_spatial_spectral_dataloader
 from data.utils import get_tensor_dataset
 from eval_method import get_eval_method
 from logger import create_logger
@@ -104,7 +105,15 @@ def main(config):
         finetune_train_src_loader = get_mask_dataloader(config, size=(128, 48, 5, 5))
         finetune_train_tgt_loader = get_mask_dataloader(config, size=(128, 48, 5, 5))
     else:
-        finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_dataloader(config,)
+        assert config.DATA.MODE in ['spectral', 'spatial+spectral', 'spatial'],f'this mode:{config.DATA.MODE} not support yet'
+        if config.DATA.MODE == 'spectral':
+            finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spectral_dataloader(config)
+        elif config.DATA.MODE == 'spatial':
+            finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_dataloader(config)
+        elif config.DATA.MODE == 'spatial+spectral':
+            get_hsi_spatial_spectral_dataloader(config)
+
+        # finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_dataloader(config)
     # 设置模型及优化器，不设置动态更新学习率了
     device = 'cpu' if on_mac else 'cuda'
     finetune_epochs = 20

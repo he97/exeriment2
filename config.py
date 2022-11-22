@@ -22,6 +22,9 @@ _C.DATA = CN()
 _C.DATA.SPATIAL = CN()
 _C.DATA.SPATIAL.HALF_WIDTH = 16
 _C.DATA.SPATIAL.PATCH_SIZE = 4
+_C.DATA.SPECTRAL = CN()
+_C.DATA.SPECTRAL.HALF_WIDTH = 2
+# _C.DATA.SPATIAL.PATCH_SIZE = 1
 # sum of epoch
 _C.DATA.EPOCHS = 80
     # epochs = 80
@@ -58,6 +61,7 @@ _C.DATA.BATCH_SIZE = 32
 # Path to dataset, could be overwritten by command line argument
 _C.DATA.PATCH_SIZE = 5
 _C.DATA.DATA_PATH = ''
+_C.DATA.MODE = 'spatial+spectral'
 _C.DATA.DATA_SOURCE_PATH = ''
 _C.DATA.DATA_TARGET_PATH = ''
 _C.DATA.LABEL_TARGET_PATH = ''

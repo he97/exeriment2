@@ -57,6 +57,28 @@ class HsiMaskTensorDataSet(Dataset):
 
     def __len__(self):
         return self.data.size(0)
+class HsiDataset(Dataset):
+    def __init__(self, spatial,spectral, label, transform_spatial,transform_spectral):
+        """
+        dataset_type: ['train', 'test']
+        """
+        assert len(spectral) == len(spatial) == len(label),'spectral spatial label length not equal'
+        self.spatial = spatial
+        self.spectral = spectral
+        self.label = label
+        self.transform_spatial = transform_spatial
+        self.transform_spectral = transform_spectral
+
+    def __getitem__(self, index):
+        spatial = self.spatial[index]
+        transform_spatial = self.transform_spatial()
+        spectral = self.spectral[index]
+        transform_spectral = self.transform_spectral()
+        label = self.label[index]
+        return spatial,transform_spatial,spectral,transform_spectral,label
+
+    def __len__(self):
+        return self.spatial.size[0]
 
 
 def to_group(tensor, config):
