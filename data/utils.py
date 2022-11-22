@@ -78,17 +78,17 @@ class HsiDataset(Dataset):
         return spatial,transform_spatial,spectral,transform_spectral,label
 
     def __len__(self):
-        return self.spatial.size[0]
+        return self.spatial.shape[0] if torch.is_tensor(self.spatial) else self.spatial.size[0]
 
 
-def to_group(tensor, config):
-    [B, C, H, W] = tensor.shape
-    tensor = tensor.reshape(B, C, -1)
+def to_group(array, config):
+    [B, C, H, W] = array.shape
+    array = array.reshape(B, C, -1)
     mask_patch_size = config.DATA.MASK_PATCH_SIZE
     assert C % mask_patch_size == 0, 'can not devide channels to groups'
     d = C // mask_patch_size
-    tensor = tensor.reshape(B, d, -1)
-    return tensor
+    array = array.reshape(B, d, -1)
+    return array
 
 def get_all_data(All_data, All_label, HalfWidth):
     print('get_all_data() run...')

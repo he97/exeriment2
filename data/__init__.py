@@ -42,41 +42,57 @@ def get_hsi_spatial_spectral_dataloader(config):
                                                                                                       spatial_half_width,
                                                                                                       spectral_half_width,
                                                                                                       0)
-    # 空间数据进行tranformer和空间pad
+
+    # spatial空间数据进行tranformer和空间pad
     spatial_patches = math.ceil((spatial_half_width * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
     transform_spatial = HsiMaskGenerator(config.DATA.MASK_RATIO, spatial_patches,
-                                 mask_patch_size=1)
+                                         mask_patch_size=1)
     transform_spectral = HsiMaskGenerator(config.DATA.MASK_RATIO, target_spectral_samples.shape[1],
-                                 mask_patch_size=config.DATA.MASK_PATCH_SIZE)
+                                          mask_patch_size=config.DATA.MASK_PATCH_SIZE)
+    # spectral info to group
+    source_spectral_samples = to_group(source_spectral_samples, config)
+    target_spectral_samples = to_group(target_spectral_samples, config)
     B, C, H, W = source_spatial_samples.shape
-    pad_pixel = math.ceil((spatial_half_width * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) * config.DATA.SPATIAL.PATCH_SIZE - (
-            spatial_half_width * 2 + 1)
+    pad_pixel = math.ceil(
+        (spatial_half_width * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) * config.DATA.SPATIAL.PATCH_SIZE - (
+                        spatial_half_width * 2 + 1)
     column_split = row_spilt = math.ceil((spatial_half_width * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE)
     # to B,C,36,36
-    source_samples = np.pad(source_spatial_samples, ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
-                                             (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
+    source_spatial_samples = np.pad(source_spatial_samples,
+                                    ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
+                                     (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
     # test_img = np.pad(test_img, ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
     #                              (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
-    target_samples = np.pad(target_spatial_samples, ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
-                                             (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
+    target_spatial_samples = np.pad(target_spatial_samples,
+                                    ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
+                                     (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
     # to B 36 36 C
-    source_samples, source_labels, target_samples, target_labels = torch.tensor(source_samples), torch.tensor(
-        source_labels), torch.tensor(target_samples), torch.tensor(target_labels)
-    rearrange(source_samples, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
-    HsiDataset(source_spatial_samples,source_spectral_samples,source_labels,transform_spatial, transform_spectral)
-    # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
-    rearrange(target_samples, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
+    source_spatial_samples, source_spectral_samples = torch.tensor(source_spatial_samples), torch.tensor(source_spectral_samples)
+    target_spatial_samples, target_spectral_samples = torch.tensor(target_spatial_samples), torch.tensor(target_spectral_samples)
+    source_labels, target_labels = torch.tensor(source_labels), torch.tensor(target_labels)
+    source_spatial_samples = rearrange(source_spatial_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split, w1=row_spilt)
+    target_spatial_samples = rearrange(target_spatial_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split, w1=row_spilt)
 
     # 定义一个新的dataset 包含空间信息，光谱信息，标签，mask空间，mask光谱
-    HsiMaskTensorDataSet
+    source_dataset = HsiDataset(source_spatial_samples, source_spectral_samples, source_labels, transform_spatial, transform_spectral)
+    # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
+    target_dataset = HsiDataset(target_spatial_samples,target_spectral_samples,target_labels,transform_spatial, transform_spectral)
 
-    source_samples = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
-    source_labels = torch.full((128,), 1.0).numpy()
-    target_samples = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
-    target_labels = torch.full((128,), 1.0).numpy()
-    test_img = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
-    test_label = torch.full((128,), 1.0).numpy()
-    return None
+
+    # dataloader
+    test_loader = DataLoader(target_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=False, num_workers=4)
+    src_train_loader = DataLoader(source_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,
+                                  drop_last=True)
+    tgt_train_loader = DataLoader(target_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,
+                                  drop_last=True)
+    return test_loader, src_train_loader, tgt_train_loader
+    # source_samples = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
+    # source_labels = torch.full((128,), 1.0).numpy()
+    # target_samples = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
+    # target_labels = torch.full((128,), 1.0).numpy()
+    # test_img = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
+    # test_label = torch.full((128,), 1.0).numpy()
+    # return None
 
 
 def get_hsi_spatial_dataloader(config):
@@ -90,12 +106,13 @@ def get_hsi_spatial_dataloader(config):
     else:
         img_source, label_source = cubeData1(config.DATA.DATA_SOURCE_PATH, config.DATA.LABEL_SOURCE_PATH, dataset)
         img_target, label_target = cubeData1(config.DATA.DATA_TARGET_PATH, config.DATA.LABEL_TARGET_PATH, dataset)
-    source_samples, source_labels = get_sample_data_without_train_val(img_source, label_source, halfwidth, config.DATA.SAMPLE_NUM)
+    source_samples, source_labels = get_sample_data_without_train_val(img_source, label_source, halfwidth,
+                                                                      config.DATA.SAMPLE_NUM)
     target_samples, target_labels = get_sample_data_without_train_val(img_target, label_target, halfwidth, 0)
 
     # 微调所使用的数据
     # test_img, test_label = get_all_data(img_target, label_target, halfwidth)  # 目标域全部样本
-    pathes = math.ceil((halfwidth*2+1) / config.DATA.SPATIAL.PATCH_SIZE)**2
+    pathes = math.ceil((halfwidth * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
     transform = HsiMaskGenerator(config.DATA.MASK_RATIO, pathes,
                                  mask_patch_size=1)
     # source_samples = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
@@ -106,7 +123,7 @@ def get_hsi_spatial_dataloader(config):
     # test_label = torch.full((128,), 1.0).numpy()
     B, C, H, W = source_samples.shape
     pad_pixel = math.ceil((halfwidth * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) * config.DATA.SPATIAL.PATCH_SIZE - (
-                halfwidth * 2 + 1)
+            halfwidth * 2 + 1)
     column_split = row_spilt = math.ceil((halfwidth * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE)
     # to B,C,36,36
     source_samples = np.pad(source_samples, ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
@@ -116,14 +133,15 @@ def get_hsi_spatial_dataloader(config):
     target_samples = np.pad(target_samples, ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
                                              (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
     # to B 36 36 C
-    source_samples, source_labels, target_samples, target_labels = torch.tensor(source_samples), torch.tensor(source_labels), torch.tensor(target_samples), torch.tensor(target_labels)
-    rearrange(source_samples, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
+    source_samples, source_labels, target_samples, target_labels = torch.tensor(source_samples), torch.tensor(
+        source_labels), torch.tensor(target_samples), torch.tensor(target_labels)
+    source_samples = rearrange(source_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split, w1=row_spilt)
     # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
-    rearrange(target_samples, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
+    target_samples = rearrange(target_samples, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
 
     # source_samples = rearrange(source_samples, 'b c (h,h1) (w,w1) -> b (h,w) (c,h1,w1)')
     # test_img = to_group(test_img, config)
-    test_dataset = HsiMaskTensorDataSet(target_samples,target_labels, transform=transform)
+    test_dataset = HsiMaskTensorDataSet(target_samples, target_labels, transform=transform)
     test_loader = DataLoader(test_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=False, num_workers=4)
     # src_img, src_label = get_sample_data(img_source, label_source, halfwidth, config.DATA.SAMPLE_NUM)
     # src_img = to_group(src_img, config)
@@ -134,9 +152,6 @@ def get_hsi_spatial_dataloader(config):
                                   drop_last=True)
 
     return test_loader, src_train_loader, tgt_train_loader
-
-
-
 
 
 def get_hsi_spectral_dataloader(config, is_pretrain: bool = True):
@@ -163,8 +178,10 @@ def get_hsi_spectral_dataloader(config, is_pretrain: bool = True):
     src_img, src_label = get_sample_data(img_source, label_source, halfwidth, config.DATA.SAMPLE_NUM)
     src_img = to_group(src_img, config)
     train_dataset = HsiMaskTensorDataSet(torch.tensor(src_img), torch.tensor(src_label), transform=transform)
-    src_train_loader = DataLoader(train_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,drop_last=True)
-    tgt_train_loader = DataLoader(test_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,drop_last=True)
+    src_train_loader = DataLoader(train_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,
+                                  drop_last=True)
+    tgt_train_loader = DataLoader(test_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,
+                                  drop_last=True)
 
     return test_loader, src_train_loader, tgt_train_loader
 

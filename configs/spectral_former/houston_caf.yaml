@@ -1,6 +1,6 @@
 MODEL:
   TYPE: SPECTRAL_FORMER
-  NAME: spectral_former_CAF
+  NAME: spectral_former_CAF_new
   DROP_PATH_RATE: 0.2
   SPECTRAL_FORMER:
     EMBED_DIM: 128

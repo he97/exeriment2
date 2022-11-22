@@ -1,6 +1,6 @@
 MODEL:
   TYPE: Dtransformer
-  NAME: pavia
+  NAME: pavia_new
   DROP_PATH_RATE: 0.2
   Dtransformer:
     EMBED_DIM: 128

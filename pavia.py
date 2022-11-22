@@ -284,7 +284,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
                     mask = mask.cuda(non_blocking=True)
                 # 从模型的结果得到一个loss
                 G_feature = G(img, mask)
-                refactor_loss = Decoder(x=img, mask=mask, rec=G_feature)
+                refactor_loss += Decoder(x=img, mask=mask, rec=G_feature)
                 # 更新参数
                 # loss_refactor.backward()
                 if config.TRAIN.CLIP_GRAD:
@@ -306,7 +306,8 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
             # epoch_time = time.time() - start
             # logger.info(f"INDEX_COUNT {epoch} index_count is {index_count}")
             # logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
-            G.zero_grad()
+            C1.train()
+            C2.train()
             C_optim.zero_grad()
 
             output = G(data_all, mask=None)
@@ -337,6 +338,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
             logger.info(f'stepC_D_loss:{D_loss}\tstepC_refactor_loss:{refactor_loss}\tstepC_all_loss:{step_3_all_loss}')
             step_3_all_loss.backward()
             G_optim.step()
+            Decoder_optim.step()
             C_optim.step()
         lr = G_optim.param_groups[0]['lr']
         memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)

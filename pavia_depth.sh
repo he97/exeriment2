@@ -3,9 +3,10 @@
 #refactor_etas=(0.0 10 20 40 80 160)
 #refactor_etas=(100 120 140)
 #refactor_etas=(60 500 1000 2000 5000 10000)
-attention_depth=(1 2 4 8 10 12 14 16)
+#attention_depth=(1 2 4 8 10 12 14 16)
+attention_depth=(8 10 12)
 model_type="pavia"
-refactor_eta=1
+refactor_eta=40
 mask_ratio=0.6
 #--cfg
 cfg="configs/Dtransformer/pavia.yaml"
@@ -22,7 +23,7 @@ label_target_path="dataset/pavia-7/PC/pavia_gt_7.mat"
 #--output
 output="outputs"
 #--tag
-tag="pavia_restore"
+tag="pavia"
 #--local_rank  python houston_program_analyze_depth.py --cfg ${cfg} --batch-size ${batch_size} --data-source-path ${data_source_path} --label-source-path ${label_source_path} --data-target-path ${data_target_path} --label-target-path ${label_target_path} --output ${output} --tag ${tag}_${model_type}_"depth"_${depth} --local_rank ${local_rank} --eta ${eta} --mask-ratio ${mask_ratio} --refactor-eta ${refactor_eta} --attention_depth ${depth}
 
 local_rank=0
