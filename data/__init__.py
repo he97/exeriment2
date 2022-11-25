@@ -36,7 +36,7 @@ def get_hsi_spatial_spectral_dataloader(config):
                                                                                                       label_source,
                                                                                                       spatial_half_width,
                                                                                                       spectral_half_width,
-                                                                                                      0)
+                                                                                                      config.DATA.SAMPLE_NUM)
     target_spatial_samples, target_spectral_samples, target_labels = get_sample_data_spatial_spectral(img_target,
                                                                                                       label_target,
                                                                                                       spatial_half_width,
@@ -137,7 +137,7 @@ def get_hsi_spatial_dataloader(config):
         source_labels), torch.tensor(target_samples), torch.tensor(target_labels)
     source_samples = rearrange(source_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split, w1=row_spilt)
     # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
-    target_samples = rearrange(target_samples, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
+    target_samples = rearrange(target_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split, w1=row_spilt)
 
     # source_samples = rearrange(source_samples, 'b c (h,h1) (w,w1) -> b (h,w) (c,h1,w1)')
     # test_img = to_group(test_img, config)

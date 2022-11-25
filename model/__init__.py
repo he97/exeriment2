@@ -1,10 +1,11 @@
 from torch import nn
 
 from model.SSFTTnet import build_SSFTTnet
-from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G
-from model.decoder import mask_decoder
+from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G, Dtransformer_for_spatial, Encoder
+from model.decoder import spectral_decoder, spatial_decoder
 from model.encoder import VisionTransformerForDemo
 from model.finetune_model import build_finetune_G
+from model.mix_model import mix_spatial_spectral
 from model.pretrain_model import build_model, SimMIMForHsi
 import math
 from functools import partial
@@ -17,12 +18,33 @@ def get_pretrain_model(config):
 
 def get_finetune_G(config):
     return build_finetune_G(config)
+
+
+def get_spatial_decoder(config):
+    out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPECTRAL.CHANNEL_DIM
+    patches_num = math.ceil((config.DATA.SPATIAL.HALF_WIDTH * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
+    patch_dim = config.MODEL.SPATIAL_PATCH_DIM
+    return spatial_decoder(patch_dim,out_dim,patches_num)
+
+
 def get_decoder(config):
+    if config.DATA.MODE == 'spectral':
+        return get_spectral_decoder(config)
+    elif config.DATA.MODE == 'spatial':
+        return get_spatial_decoder(config)
+    elif config.DATA.MODE=='spatial+spectral':
+        return get_spatial_decoder(config), get_spectral_decoder(config)
+    else:
+        raise Exception(f'{config.DATA.MODE} decoder not support yet')
+
+
+def get_spectral_decoder(config):
     encoder_stride = config.DATA.MASK_PATCH_SIZE
-    model = mask_decoder(config,encoder_stride=encoder_stride)
+    model = spectral_decoder(config, encoder_stride=encoder_stride)
     return model
-def get_G(config):
-    model_type = config.MODEL.TYPE
+
+
+def get_spectral_G(model_type,config):
     if model_type == 'vit':
         # raise Exception('vit not support')
         encoder = VisionTransformerForDemo(
@@ -59,3 +81,43 @@ def get_G(config):
     else:
         raise NotImplementedError(f"Unknown pre-train model: {model_type}")
     return encoder
+def get_spatial_G(model_type,config):
+    if model_type == 'Dtransformer':
+        in_dim = config.DATA.SPATIAL.PATCH_SIZE**2*config.DATA.SPECTRAL.CHANNEL_DIM
+        in_channels = math.ceil((config.DATA.SPATIAL.HALF_WIDTH*2+1)/config.DATA.SPATIAL.PATCH_SIZE)**2
+        patch_dim = config.MODEL.SPATIAL_PATCH_DIM
+        return Dtransformer_for_spatial(
+            in_dim = in_dim,
+            in_chans=in_channels,
+            patch_dim=patch_dim,
+            # patch_size=config.MODEL.Dtransformer.PATCH_SIZE,
+            attn_layers=Encoder(
+                dim=patch_dim,
+                depth=config.MODEL.Dtransformer.DEPTH,
+                heads=2)
+            )
+def get_G(config):
+    model_type = config.MODEL.TYPE
+    if config.DATA.MODE == 'spectral':
+        return get_spectral_G(model_type,config)
+    elif config.DATA.MODE == 'spatial':
+        return get_spatial_G(model_type,config)
+    elif config.DATA.MODE=='spatial+spectral':
+        return get_spatial_G(model_type, config),get_spectral_G(model_type, config)
+    else:
+        raise Exception('this mode not have mode')
+
+def get_mix_model(config):
+    '''
+    mix two decoder output  use mlp
+    in:a decoder out+ b decoder out
+    output:classifier:in
+    :param config:
+    :return:
+    '''
+    spectral_out_dim = config.MODEL.SPECTRAL_PATCH_DIM
+    spatial_out_dim = config.MODEL.SPATIAL_PATCH_DIM
+    classifier_in_dim =config.MODEL.CLASSIFIER_IN_DIM
+    return mix_spatial_spectral(spectral_out_dim=spectral_out_dim,
+                                spatial_out_dim=spatial_out_dim,
+                                classifier_in_dim=classifier_in_dim)

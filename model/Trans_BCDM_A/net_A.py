@@ -897,6 +897,106 @@ class Dtransformer_as_G(DTransformer):
     def no_weight_decay_keywords(self):
         return {'relative_position_bias_table'}
 
+class Dtransformer_for_spatial(nn.Module):
+    def __init__(
+                self,
+                *,
+                in_dim,
+                in_chans,
+                patch_dim,
+                # patch_size,
+                attn_layers,
+                pos_embed=False,
+                num_classes=None,
+                dropout=0.,
+                emb_dropout=0.):
+        super().__init__()
+        assert isinstance(attn_layers, Encoder), 'attention layers must be an Encoder'
+        # assert in_chans % self.mask_patch_size == 0, 'can not divide to group'
+        dim = attn_layers.dim
+
+        self.num_features = self.embed_dim = patch_dim
+        self.pos_embed = pos_embed
+        self.in_chans = in_chans
+
+        # self.patch_size = patch_size
+
+        self.patch_embed = PatchEmbed(in_dim, patch_dim)
+        self.pos_embedding = nn.Parameter(torch.randn(1, in_chans+ 1, dim))
+        self.patch_to_embedding = nn.Linear(patch_dim, dim)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+        self.dropout = nn.Dropout(emb_dropout)
+
+        self.attn_layers = attn_layers
+        self.norm = nn.LayerNorm(dim)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        self.mlp_head = FeedForward(dim, dim_out=num_classes, dropout=dropout) if exists(num_classes) else None
+
+    def _trunc_normal_(self, tensor, mean=0., std=1.):
+        trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
+
+    def forward(self, x, mask):
+        if mask is not None:
+            x = self.patch_embed(x)
+
+            assert mask is not None
+            B, L, _ = x.shape
+
+            mask_token = self.mask_token.expand(B, L, -1)
+            # mask = mask.repeat(1, self.mask_patch_size)
+            # w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+            w = mask.unsqueeze(-1).type_as(mask_token)
+            x = x * (1 - w) + mask_token * w
+
+            # result = x - mask_token*w
+            # 师哥的代码的cls_tokens
+            cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=B)  # stole cls_tokens impl from Phil Wang, thanks
+            x = torch.cat((cls_tokens, x), dim=1)
+
+            b, n, _ = x.shape
+
+            # if self.pos_embed is True:
+            x += self.pos_embedding[:, :(n + 1)]
+
+
+            x = self.dropout(x)
+
+            x = self.attn_layers(x)
+
+            # 一个正则项
+            x = self.norm(x)
+            x = x[:, 1:]
+
+            return x
+
+        else:
+            x = self.patch_embed(x)
+
+            # assert mask is not None
+            B, L, _ = x.shape
+
+            # 师哥的代码的cls_tokens
+            cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=B)  # stole cls_tokens impl from Phil Wang, thanks
+            x = torch.cat((cls_tokens, x), dim=1)
+
+            b, n, _ = x.shape
+
+            # if self.pos_embed is True:
+            x += self.pos_embedding[:, :(n + 1)]
+
+            x = self.dropout(x)
+
+            x = self.attn_layers(x)
+            return x[:,0,:]
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'absolute_pos_embed'}
+
+    @torch.jit.ignore
+    def no_weight_decay_keywords(self):
+        return {'relative_position_bias_table'}
+
 
 def build_Dtransformer(config):
     # 师哥代码的参数

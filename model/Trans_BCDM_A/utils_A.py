@@ -222,8 +222,8 @@ def get_sample_data_without_train_val(Sample_data, Sample_label, HalfWidth, num_
         indices = [j for j, x in enumerate(Row.ravel().tolist()) if label[Row[j], Column[j]] == i + 1]
         np.random.shuffle(indices)
         # num_per_class 有什么作用？ 选择训练和测试的数目
-        num_per_class = int(len(indices)) if num_per_class<=0 else num_per_class
-        train[i] = indices[:num_per_class]
+        per_class_num = int(len(indices)) if num_per_class <= 0 else num_per_class
+        train[i] = indices[:per_class_num]
         # val[i] = indices[num_per_class:]
 
     for i in range(m):
@@ -313,8 +313,8 @@ def get_sample_data_spatial_spectral(Sample_data, Sample_label, half_width_spati
         indices = [j for j, x in enumerate(Row.ravel().tolist()) if label[Row[j], Column[j]] == i + 1]
         np.random.shuffle(indices)
         # num_per_class 有什么作用？ 选择训练和测试的数目
-        num_per_class = int(len(indices))
-        train[i] = indices[:num_per_class]
+        per_class_num = int(len(indices)) if num_per_class<=0 else num_per_class
+        train[i] = indices[:per_class_num]
         # val[i] = indices[num_per_class:]
 
     for i in range(m):
