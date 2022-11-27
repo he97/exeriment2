@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from sklearn.decomposition import PCA
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 
 
@@ -222,3 +223,11 @@ def get_tensor_dataset(size=(256, 48, 5, 5), tensor_type='randn', have_label=Tru
         return TensorDataset(vector, label)
     else:
         return TensorDataset(vector)
+
+def get_pca_data(data, numComponents):
+    pca = PCA(n_components=numComponents,whiten=True);
+    data = np.transpose(data,(0,2,3,1))
+    B,H,W,C = data.shape
+    X = np.reshape(data,(-1,data.shape[-1]))
+    new_data = pca.fit_transform(X)
+    return np.transpose(np.reshape(new_data,(B,H,W,numComponents)),(0,3,1,2))

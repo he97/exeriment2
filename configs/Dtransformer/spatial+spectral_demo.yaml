@@ -1,0 +1,44 @@
+MODEL:
+  TYPE: Dtransformer
+  NAME: spatial_spectral_mix_demo
+  DROP_PATH_RATE: 0.2
+  SPATIAL_PATCH_DIM: 1024
+  SPECTRAL_PATCH_DIM: 1024
+  CLASSIFIER_IN_DIM: 1024
+  Dtransformer:
+    EMBED_DIM: 128
+    PATCH_DIM: 1024
+    DEPTHS: [ 2, 2, 18, 2 ]
+    NUM_HEADS: [ 4, 8, 16, 32 ]
+    WINDOW_SIZE: 6
+    DEPTH: 2
+  LABEL_SMOOTHING: 0.0
+  LEARNING_RATE: 2.5e-5
+DATA:
+  MODE: spatial+spectral
+  IMG_SIZE: 224
+  MASK_PATCH_SIZE: 4
+  MASK_RATIO: 0.6
+  DATASET: huston13-18
+  LEARNING_RATE: 2.5e-5
+  SAMPLE_NUM: 180
+  PATCH_DIM: 1024
+TRAIN:
+  EPOCHS: 100
+  WARMUP_EPOCHS: 10
+  BASE_LR: 8e-4
+  WARMUP_LR: 2.5e-7
+  MIN_LR: 2.5e-7
+  WEIGHT_DECAY: 0.05
+  LAYER_DECAY: 0.7
+  FINETUNE:
+    BASE_LR: 8e-4
+    WARMUP_LR: 2.5e-7
+    MIN_LR: 2.5e-7
+PRINT_FREQ: 100
+SAVE_FREQ: 5
+TAG: simmim_finetune__Dtransformer_finetune
+IS_HSI: TRUE
+IS_DIST: False
+AUG:
+  MIXUP: 0.0

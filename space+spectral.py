@@ -131,8 +131,10 @@ def main(config):
     Decoder_spatial = Decoder_spatial.to(device)
     Decoder_spectral = Decoder_spectral.to(device)
     mix_model = get_mix_model(config).to(device)
-    C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=config.MODEL.CLASSIFIER_IN_DIM).to(device)
-    C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=config.MODEL.CLASSIFIER_IN_DIM).to(device)
+    C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM,
+                       num_unit=config.MODEL.SPECTRAL_PATCH_DIM+config.MODEL.SPATIAL_PATCH_DIM).to(device)
+    C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM,
+                       num_unit=config.MODEL.SPECTRAL_PATCH_DIM+config.MODEL.SPATIAL_PATCH_DIM).to(device)
     logger.info(f'G_spatial:{str(G_spatial)}')
     logger.info(f'G_spectral:{str(G_spectral)}')
     logger.info(f'decoder_spatial:{str(Decoder_spatial)}')
@@ -269,7 +271,7 @@ def train_one_epoch(config, G_spatial, G_spectral, Decoder_spatial, Decoder_spec
         C_optim.zero_grad()
         # temp_d = copy.deepcopy(pretrain_model.state_dict())
         output_spatial = G_spatial(spatial_all, mask=None)
-        output_spectral = G_spectral(spectral_all,mask=None)
+        output_spectral = G_spectral(spectral_all, mask=None)
         output = mix_model(output_spatial, output_spectral)
         # 输出size是64 1024
         output1 = C1(output)
@@ -283,7 +285,7 @@ def train_one_epoch(config, G_spatial, G_spectral, Decoder_spatial, Decoder_spec
         entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
         loss1 = criterion(output_s1, s_label)
-        loss2 = criterion(output_s2, t_label)
+        loss2 = criterion(output_s2, s_label)
 
         # all_loss = loss1 + loss2 + 0.01 * entropy_loss
         all_loss = loss1 + loss2

@@ -21,7 +21,7 @@ def get_finetune_G(config):
 
 
 def get_spatial_decoder(config):
-    out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPECTRAL.CHANNEL_DIM
+    out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPATIAL.COMPONENT_NUM
     patches_num = math.ceil((config.DATA.SPATIAL.HALF_WIDTH * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
     patch_dim = config.MODEL.SPATIAL_PATCH_DIM
     return spatial_decoder(patch_dim,out_dim,patches_num)
@@ -83,7 +83,7 @@ def get_spectral_G(model_type,config):
     return encoder
 def get_spatial_G(model_type,config):
     if model_type == 'Dtransformer':
-        in_dim = config.DATA.SPATIAL.PATCH_SIZE**2*config.DATA.SPECTRAL.CHANNEL_DIM
+        in_dim = config.DATA.SPATIAL.PATCH_SIZE**2*config.DATA.SPATIAL.COMPONENT_NUM
         in_channels = math.ceil((config.DATA.SPATIAL.HALF_WIDTH*2+1)/config.DATA.SPATIAL.PATCH_SIZE)**2
         patch_dim = config.MODEL.SPATIAL_PATCH_DIM
         return Dtransformer_for_spatial(
