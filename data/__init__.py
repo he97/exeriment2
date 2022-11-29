@@ -46,7 +46,7 @@ def get_hsi_spatial_spectral_dataloader(config):
 
     # spatial空间数据进行tranformer和空间pad
     spatial_patches = math.ceil((spatial_half_width * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
-    transform_spatial = HsiMaskGenerator(config.DATA.MASK_RATIO, spatial_patches,
+    transform_spatial = HsiMaskGenerator(config.DATA.SPATIAL_MASK_RATIO, spatial_patches,
                                          mask_patch_size=1)
     transform_spectral = HsiMaskGenerator(config.DATA.MASK_RATIO, target_spectral_samples.shape[1],
                                           mask_patch_size=config.DATA.MASK_PATCH_SIZE)
@@ -191,7 +191,7 @@ def get_hsi_spatial_dataloader(config):
     # 微调所使用的数据
     # test_img, test_label = get_all_data(img_target, label_target, halfwidth)  # 目标域全部样本
     pathes = math.ceil((halfwidth * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
-    transform = HsiMaskGenerator(config.DATA.MASK_RATIO, pathes,
+    transform = HsiMaskGenerator(config.DATA.SPATIAL_MASK_RATIO, pathes,
                                  mask_patch_size=1)
     # source_samples = torch.range(1, 128 * 48 * 33 * 33).reshape((128, 48, 33, 33)).numpy()
     # source_labels = torch.full((128,), 1.0).numpy()

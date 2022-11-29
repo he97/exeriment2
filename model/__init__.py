@@ -93,7 +93,7 @@ def get_spatial_G(model_type,config):
             # patch_size=config.MODEL.Dtransformer.PATCH_SIZE,
             attn_layers=Encoder(
                 dim=patch_dim,
-                depth=config.MODEL.Dtransformer.DEPTH,
+                depth=config.MODEL.Dtransformer.SPATIAL_DEPTH,
                 heads=2)
             )
 def get_G(config):

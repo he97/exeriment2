@@ -76,6 +76,12 @@ def parse_option():
     parser.add_argument("--refactor-eta", type=float, required=True, help='eta of refactor loss')
     # depth
     parser.add_argument("--attention-depth", type=int, required=True, help='eta of refactor loss')
+    # spatial mask_ratio
+    parser.add_argument("--spatial-mask-ratio", type=float, required=True, help='spatial mask ratio')
+    # spatial refactor_eta
+    parser.add_argument("--spatial-refactor-eta", type=float, required=True, help='spatial eta of refactor loss')
+    # spatial depth
+    parser.add_argument("--spatial-attention-depth", type=int, required=True, help='spatialeta of refactor loss')
     # 解析参数
     args = parser.parse_args()
     # 得到yacs cfgNOde，值是原有的值
@@ -222,6 +228,7 @@ def train_one_epoch(config, G_spatial, G_spectral, Decoder_spatial, Decoder_spec
         criterion = nn.CrossEntropyLoss().cuda()
     eta = config.TRAIN.ETA
     rf_eta = config.TRAIN.RF_ETA
+    spatial_rf_eta = config.TRAIN.SPATIAL_RF_ETA
     G_spatial.train()
     G_spectral.train()
     Decoder_spatial.train()
@@ -420,13 +427,13 @@ def train_one_epoch(config, G_spatial, G_spectral, Decoder_spatial, Decoder_spec
             loss_dis = cdd(output_t1, output_t2)
             # D_loss = eta * loss_dis + 0.01 * entropy_loss
             D_loss = eta * loss_dis
-            step_3_all_loss = D_loss + rf_eta * spectral_refactor_loss + rf_eta * spatial_refactor_loss
+            step_3_all_loss = D_loss + rf_eta * spectral_refactor_loss + spatial_refactor_loss * spatial_refactor_loss
             writer.add_scalar(tag='stepC_CDD_loss', scalar_value=loss_dis, global_step=epoch * finetune_step*NUM_K + batch_idx*NUM_K+i)
             # writer.add_scalar(tag='stepC_D_loss', scalar_value=D_loss,
             #                   global_step=epoch * finetune_step + batch_idx * NUM_K + i)
             writer.add_scalar(tag='stepC_spectral_refactor_loss', scalar_value=rf_eta * spectral_refactor_loss,
                               global_step=epoch * finetune_step*NUM_K + batch_idx*NUM_K+i)
-            writer.add_scalar(tag='stepC_spatial_refactor_loss', scalar_value=rf_eta * spatial_refactor_loss,
+            writer.add_scalar(tag='stepC_spatial_refactor_loss', scalar_value=spatial_rf_eta * spatial_refactor_loss,
                               global_step=epoch * finetune_step * NUM_K + batch_idx * NUM_K + i)
             writer.add_scalar(tag='stepC_all_loss', scalar_value=step_3_all_loss,
                               global_step=epoch * finetune_step*NUM_K + batch_idx*NUM_K+i)

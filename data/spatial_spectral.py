@@ -13,7 +13,7 @@ from data.utils import get_mask_dataloader, get_all_data, to_group, get_sample_d
 from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_without_train_val, \
     get_sample_data_spatial_spectral
 from utils import check_dataset
-def get_hsi_spatial_spectral_dataloader(config):
+def get_hsi_pca_spatial_spectral_dataloader(config):
     '''
     必须要保证 空间和光谱的信息 是同一元素上的
     :param config:
@@ -43,9 +43,9 @@ def get_hsi_spatial_spectral_dataloader(config):
                                                                                                       0)
     length = config.DATA.SAMPLE_NUM * config.DATA.CLASS_NUM
     spatial_pca_data = np.concatenate((source_spatial_samples, target_spatial_samples[:length]))
-    pca_label = np.concatenate((source_labels, target_labels[:length]))
+    # pca_label = np.concatenate((source_labels, target_labels[:length]))
     spatial_pca_data = get_pca_data(spatial_pca_data, config.DATA.SPATIAL.COMPONENT_NUM)
-    all_target_pca_data = get_pca_data(target_spatial_samples, config.DATA.SPATIAL.COMPONENT_NUM)
+    all_target_spatial_pca_data = get_pca_data(target_spatial_samples, config.DATA.SPATIAL.COMPONENT_NUM)
     source_spatial_pca_samples = spatial_pca_data[:length]
     target_spatial_pca_samples = spatial_pca_data[length:]
     source_spatial_pca_label = pca_label[:length]
@@ -73,7 +73,7 @@ def get_hsi_spatial_spectral_dataloader(config):
     target_spatial_pca_samples = np.pad(target_spatial_pca_samples,
                                 ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
                                  (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
-    all_target_pca_data = np.pad(all_target_pca_data,
+    all_target_spatial_pca_data = np.pad(all_target_spatial_pca_data,
                                  ((0, 0), (0, 0), (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2)),
                                   (math.floor(pad_pixel / 2), math.ceil(pad_pixel / 2))), 'constant')
     # to B 36 36 C
@@ -87,17 +87,18 @@ def get_hsi_spatial_spectral_dataloader(config):
     # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
     target_pca_samples = rearrange(target_pca_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
                                    w1=row_spilt)
-    all_target_pca_data = rearrange(all_target_pca_data, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
+    all_target_spatial_pca_data = rearrange(all_target_spatial_pca_data, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
                                     w1=row_spilt)
 
     # 定义一个新的dataset 包含空间信息，光谱信息，标签，mask空间，mask光谱
     source_dataset = HsiDataset(source_spatial_samples, source_spectral_samples, source_labels, transform_spatial, transform_spectral)
     # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
     target_dataset = HsiDataset(target_spatial_samples,target_spectral_samples,target_labels,transform_spatial, transform_spectral)
+    test_dataset = HsiDataset(target_spatial_pca_samples,target_spectral_samples,target_labels,transform_spatial,transform_spectral)
 
 
     # dataloader
-    test_loader = DataLoader(target_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=False, num_workers=4)
     src_train_loader = DataLoader(source_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,
                                   drop_last=True)
     tgt_train_loader = DataLoader(target_dataset, batch_size=config.DATA.BATCH_SIZE, shuffle=True, num_workers=4,
