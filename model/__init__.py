@@ -2,6 +2,7 @@ from torch import nn
 
 from model.SSFTTnet import build_SSFTTnet
 from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G, Dtransformer_for_spatial, Encoder
+from model.classifier import Classifier
 from model.decoder import spectral_decoder, spatial_decoder
 from model.encoder import VisionTransformerForDemo
 from model.finetune_model import build_finetune_G
@@ -127,3 +128,9 @@ def get_mix_model(config):
     return mix_spatial_spectral(spectral_out_dim=spectral_out_dim,
                                 spatial_out_dim=spatial_out_dim,
                                 classifier_in_dim=classifier_in_dim)
+
+def get_classifier(config,depth=3):
+    return Classifier(num_classes=config.DATA.CLASS_NUM,
+                      num_unit=config.MODEL.SPECTRAL_PATCH_DIM+config.MODEL.SPATIAL_PATCH_DIM,
+                      middle=1024,
+                      middle_depth=depth)

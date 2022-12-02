@@ -26,7 +26,7 @@ from data.utils import get_tensor_dataset
 from eval_method import get_eval_method
 from logger import create_logger
 from lr_scheduler import build_scheduler, build_finetune_scheduler
-from model import get_pretrain_model, get_finetune_G, get_G, get_decoder, get_mix_model
+from model import get_pretrain_model, get_finetune_G, get_G, get_decoder, get_mix_model, get_classifier
 from model.Trans_BCDM_A.net_A import ResClassifier
 from model.Trans_BCDM_A.utils_A import cdd
 from optimizer import build_optimizer, build_optimizer_c
@@ -138,10 +138,8 @@ def main(config):
     Decoder_spatial = Decoder_spatial.to(device)
     Decoder_spectral = Decoder_spectral.to(device)
     mix_model = get_mix_model(config).to(device)
-    C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM,
-                       num_unit=config.MODEL.SPECTRAL_PATCH_DIM+config.MODEL.SPATIAL_PATCH_DIM).to(device)
-    C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM,
-                       num_unit=config.MODEL.SPECTRAL_PATCH_DIM+config.MODEL.SPATIAL_PATCH_DIM).to(device)
+    C1 = get_classifier(config).to(device)
+    C2 = get_classifier(config).to(device)
     logger.info(f'G_spatial:{str(G_spatial)}')
     logger.info(f'G_spectral:{str(G_spectral)}')
     logger.info(f'decoder_spatial:{str(Decoder_spatial)}')
@@ -260,8 +258,10 @@ def train_one_epoch(config, G_spatial, G_spectral, Decoder_spatial, Decoder_spec
             data_loader[1].append(Variable(torch.cat((t_1, s_2))))
 
         if not on_mac:
-            s_spatial, s_spatial_mask, s_spectral, s_spectral_mask, s_label = s_spatial.cuda(), s_spatial_mask.cuda(), s_spectral.cuda(), s_spectral_mask.cuda(), s_label.cuda()
-            t_spatial, t_spatial_mask, t_spectral, t_spectral_mask, t_label = t_spatial.cuda(), t_spatial_mask.cuda(), t_spectral.cuda(), t_spectral_mask.cuda(), t_label.cuda()
+            s_spatial, s_spatial_mask, s_spectral, s_spectral_mask, s_label = \
+                s_spatial.cuda(), s_spatial_mask.cuda(), s_spectral.cuda(), s_spectral_mask.cuda(), s_label.cuda()
+            t_spatial, t_spatial_mask, t_spectral, t_spectral_mask, t_label = \
+                t_spatial.cuda(), t_spatial_mask.cuda(), t_spectral.cuda(), t_spectral_mask.cuda(), t_label.cuda()
         spatial_all = Variable(torch.cat((s_spatial, t_spatial), 0))
         spectral_all = Variable(torch.cat((s_spectral, t_spectral), 0))
         # data_all = data_all.type(torch.LongTensor)
