@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 
 from data.data_finetune import get_finetune_dataloader
 from data.data_pretrain import get_pretrain_dataloader
+from data.spatial_spectral import get_hsi_spatial_spectral_pca_dataloader
 from data.utils import get_mask_dataloader, get_all_data, to_group, get_sample_data, HsiMaskGenerator, \
     HsiMaskTensorDataSet, HsiDataset, get_pca_data
 from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_without_train_val, \
@@ -15,7 +16,7 @@ from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_with
 from utils import check_dataset
 
 
-def get_hsi_spatial_spectral_dataloader(config):
+def get_hsi_spatial_spectral_without_pca_dataloader(config):
     '''
     必须要保证 空间和光谱的信息 是同一元素上的
     :param config:
@@ -172,8 +173,18 @@ def get_hsi_spatial_pca_dataloader(config):
 
     return test_loader, src_train_loader, tgt_train_loader
 
-
 def get_hsi_spatial_dataloader(config):
+    if config.DATA.SPATIAL.PCA:
+        return get_hsi_spatial_pca_dataloader(config)
+    else:
+        return get_hsi_spatial_without_pca_dataloader(config)
+
+def get_hsi_patial_spectral_dataloader(config):
+    if config.DATA.SPATIAL.PCA:
+        return get_hsi_spatial_spectral_pca_dataloader(config)
+    else:
+        return get_hsi_spatial_spectral_without_pca_dataloader(config)
+def get_hsi_spatial_without_pca_dataloader(config):
     halfwidth = config.DATA.SPATIAL.HALF_WIDTH
     dataset = check_dataset(config)
     if dataset == 'indian' or dataset == 'shanghai-hangzhou':

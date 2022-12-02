@@ -13,7 +13,7 @@ from data.utils import get_mask_dataloader, get_all_data, to_group, get_sample_d
 from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_without_train_val, \
     get_sample_data_spatial_spectral
 from utils import check_dataset
-def get_hsi_pca_spatial_spectral_dataloader(config):
+def get_hsi_spatial_spectral_pca_dataloader(config):
     '''
     必须要保证 空间和光谱的信息 是同一元素上的
     :param config:
@@ -48,11 +48,11 @@ def get_hsi_pca_spatial_spectral_dataloader(config):
     all_target_spatial_pca_data = get_pca_data(target_spatial_samples, config.DATA.SPATIAL.COMPONENT_NUM)
     source_spatial_pca_samples = spatial_pca_data[:length]
     target_spatial_pca_samples = spatial_pca_data[length:]
-    source_spatial_pca_label = pca_label[:length]
-    target_spatial_pca_label = pca_label[length:]
+    source_spatial_pca_label = source_labels
+    target_spatial_pca_label = target_labels[:length]
     # spatial空间数据进行tranformer和空间pad
     spatial_patches = math.ceil((spatial_half_width * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
-    transform_spatial = HsiMaskGenerator(config.DATA.MASK_RATIO, spatial_patches,
+    transform_spatial = HsiMaskGenerator(config.DATA.SPATIAL_MASK_RATIO, spatial_patches,
                                          mask_patch_size=1)
     transform_spectral = HsiMaskGenerator(config.DATA.MASK_RATIO, target_spectral_samples.shape[1],
                                           mask_patch_size=config.DATA.MASK_PATCH_SIZE)
@@ -80,21 +80,22 @@ def get_hsi_pca_spatial_spectral_dataloader(config):
     source_spatial_samples, source_spectral_samples = torch.tensor(source_spatial_samples), torch.tensor(source_spectral_samples)
     target_spatial_samples, target_spectral_samples = torch.tensor(target_spatial_samples), torch.tensor(target_spectral_samples)
     source_labels, target_labels = torch.tensor(source_labels), torch.tensor(target_labels)
-    source_pca_samples, source_pca_label = torch.tensor(source_spatial_pca_samples), torch.tensor(source_spatial_pca_label)
-    target_pca_samples, target_pca_label = torch.tensor(target_spatial_pca_samples), torch.tensor(target_spatial_pca_label)
-    source_pca_samples = rearrange(source_pca_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
+    source_spatial_pca_samples, source_pca_label = torch.tensor(source_spatial_pca_samples), torch.tensor(source_spatial_pca_label)
+    target_spatial_pca_samples, target_pca_label = torch.tensor(target_spatial_pca_samples), torch.tensor(target_spatial_pca_label)
+    all_target_spatial_pca_data = torch.tensor(all_target_spatial_pca_data)
+    source_spatial_pca_samples = rearrange(source_spatial_pca_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
                                    w1=row_spilt)
     # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
-    target_pca_samples = rearrange(target_pca_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
+    target_spatial_pca_samples = rearrange(target_spatial_pca_samples, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
                                    w1=row_spilt)
     all_target_spatial_pca_data = rearrange(all_target_spatial_pca_data, 'b c (h1 h) (w1 w) -> b (h1 w1) (c h w)', h1=column_split,
                                     w1=row_spilt)
 
     # 定义一个新的dataset 包含空间信息，光谱信息，标签，mask空间，mask光谱
-    source_dataset = HsiDataset(source_spatial_samples, source_spectral_samples, source_labels, transform_spatial, transform_spectral)
+    source_dataset = HsiDataset(source_spatial_pca_samples, source_spectral_samples, source_pca_label, transform_spatial, transform_spectral)
     # rearrange(test_img, 'b c (h1 h) (w1 w) -> b (h w) (c h1 w1)', h1=column_split, h2=row_spilt)
-    target_dataset = HsiDataset(target_spatial_samples,target_spectral_samples,target_labels,transform_spatial, transform_spectral)
-    test_dataset = HsiDataset(target_spatial_pca_samples,target_spectral_samples,target_labels,transform_spatial,transform_spectral)
+    target_dataset = HsiDataset(target_spatial_pca_samples,target_spectral_samples[:length],target_pca_label,transform_spatial, transform_spectral)
+    test_dataset = HsiDataset(all_target_spatial_pca_data,target_spectral_samples,target_labels,transform_spatial,transform_spectral)
 
 
     # dataloader

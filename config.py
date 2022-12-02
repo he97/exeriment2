@@ -23,6 +23,7 @@ _C.DATA.SPATIAL = CN()
 _C.DATA.SPATIAL.HALF_WIDTH = 16
 _C.DATA.SPATIAL.PATCH_SIZE = 4
 _C.DATA.SPATIAL.COMPONENT_NUM = 3
+_C.DATA.SPATIAL.PCA = False
 _C.DATA.SPECTRAL = CN()
 _C.DATA.SPECTRAL.HALF_WIDTH = 2
 _C.DATA.SPECTRAL.CHANNEL_DIM = 48
@@ -113,7 +114,7 @@ _C.MODEL.LABEL_SMOOTHING = 0.1
 _C.MODEL.LEARNING_RATE = 1e-4
 # patch_dim
 _C.MODEL.SPATIAL_PATCH_DIM = 1024
-_C.MODEL.SPECTRAL_PATCH_DIM = 512
+_C.MODEL.SPECTRAL_PATCH_DIM = 1024
 _C.MODEL.CLASSIFIER_IN_DIM = 1024
 
 
@@ -402,6 +403,19 @@ def update_config(config, args):
         else:
             raise Exception(f"not support type:{type}")
         # config.MODEL.eval(config.MODEL.TYPE).DEPTH = args.attention_depth
+    if _check_args_without_eval('spatial_mask_ratio'):
+        config.DATA.SPATIAL_MASK_RATIO = args.spatial_mask_ratio
+    if _check_args_without_eval("spatial_refactor_eta"):
+        config.TRAIN.SPATIAL_RF_ETA = args.spatial_refactor_eta
+    if _check_args("spatial_attention_depth"):
+        type = config.MODEL.TYPE
+        if type == "SPECTRAL_FORMER":
+            # config.MODEL.eval(config.MODEL.TYPE).DEPTH = args.attention_depth
+            config.MODEL.SPECTRAL_FORMER.SPATIAL_DEPTH = args.spatial_attention_depth
+        elif type == "Dtransformer":
+            config.MODEL.Dtransformer.SPATIAL_DEPTH = args.spatial_attention_depth
+        else:
+            raise Exception(f"not support type:{type}")
 
 
     # set local rank for distributed training

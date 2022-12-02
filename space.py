@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from config import get_config
 from data import get_hsi_spectral_dataloader, get_virtual_dataloader, get_mask_dataloader, get_hsi_spatial_dataloader, \
-    get_hsi_spatial_spectral_dataloader, get_hsi_spatial_pca_dataloader
+    get_hsi_spatial_spectral_without_pca_dataloader, get_hsi_spatial_pca_dataloader
 from data.utils import get_tensor_dataset
 from eval_method import get_eval_method
 from logger import create_logger
@@ -112,7 +112,7 @@ def main(config):
         elif config.DATA.MODE == 'spatial':
             finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_pca_dataloader(config)
         elif config.DATA.MODE == 'spatial+spectral':
-            get_hsi_spatial_spectral_dataloader(config)
+            get_hsi_spatial_spectral_without_pca_dataloader(config)
 
         # finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_dataloader(config)
     # 设置模型及优化器，不设置动态更新学习率了

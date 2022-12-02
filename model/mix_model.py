@@ -10,8 +10,8 @@ class mix_spatial_spectral(nn.Module):
         self.classifier_out_dim = classifier_in_dim
 
         self.decoder = nn.Sequential(
-            # nn.LayerNorm(self.spatial_out_dim+self.spectral_out_dim),
-            # nn.Linear(in_features=self.spectral_out_dim+self.spatial_out_dim, out_features=self.classifier_out_dim),
+            nn.LayerNorm(self.spatial_out_dim+self.spectral_out_dim),
+            nn.Linear(in_features=self.spectral_out_dim+self.spatial_out_dim, out_features=self.classifier_out_dim),
             # nn.Conv1d(
             #     in_channels=self.encoder.in_chans,
             #     out_channels=self.encoder.in_chans, kernel_size=self.encoder.num_features // encoder_stride**2 ,stride=self.encoder.num_features // encoder_stride**2),
