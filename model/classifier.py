@@ -78,6 +78,30 @@ class Classifier(nn.Module):
             x = grad_reverse(x, self.lambd)
         y = self.classifier1(x)
         return y
+
+class FResClassifier(nn.Module):
+    def __init__(self, num_classes=12, num_unit=2048, prob=0.2, middle=1000, middle_depth=2):
+        super(FResClassifier, self).__init__()
+        layers1 = []
+        # currently 10000 units
+        # layers1.append(nn.BatchNorm1d(num_unit, affine=True))
+        layers1.append(nn.Linear(num_unit,middle))
+        layers1.append(nn.BatchNorm1d(middle,affine=True))
+        layers1.append(nn.ReLU(inplace=True))
+        layers1.append(nn.Dropout(p=prob))
+        # layers1.append(nn.Dropout(p=prob))
+        for _ in range(middle_depth):
+            layers1.append(nn.Linear(middle, middle))
+            layers1.append(nn.BatchNorm1d(middle, affine=True))
+            layers1.append(nn.ReLU(inplace=True))
+            layers1.append(nn.Dropout(p=prob))
+        fc13 = nn.Linear(middle, num_classes)
+        # self.fc13 = fc13
+        # layers1.append(fc13)
+        self.classifier1 = nn.Sequential(*layers1)
+    def forward(self, x):
+        y = self.classifier1(x)
+        return y
 if __name__ == '__main__':
     a = Classifier(num_classes=24,middle_depth=3)
     for name, value in Classifier(num_classes=24,middle_depth=3).named_parameters():
