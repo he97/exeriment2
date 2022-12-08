@@ -1,6 +1,6 @@
 MODEL:
   TYPE: Dtransformer
-  NAME: spatial_spectral_dim512
+  NAME: spatial_hf2_spectral_dim512
   DROP_PATH_RATE: 0.2
   SPATIAL_PATCH_DIM: 512
   SPECTRAL_PATCH_DIM: 512
@@ -26,6 +26,8 @@ DATA:
   SPATIAL:
     PCA: False
     COMPONENT_NUM: 3
+    HALF_WIDTH: 2
+    PATCH_SIZE: 1
 TRAIN:
   EPOCHS: 100
   WARMUP_EPOCHS: 10
