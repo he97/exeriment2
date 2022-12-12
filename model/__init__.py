@@ -2,7 +2,8 @@ from torch import nn
 
 from model.SSFTTnet import build_SSFTTnet
 from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G, Dtransformer_for_spatial, Encoder
-from model.classifier import Classifier, FResClassifier, PengResClassifier, AttentionClassifier
+from model.classifier import Classifier, FResClassifier, PengResClassifier, AttentionClassifier, \
+    Attention_ALL_Classifier
 from model.decoder import spectral_decoder, spatial_decoder
 from model.encoder import VisionTransformerForDemo
 from model.finetune_model import build_finetune_G
@@ -131,8 +132,8 @@ def get_mix_model(config):
 
 def get_classifier(config,depth=3):
     if config.CLASSIFIER.MODE == 'attention':
-        return AttentionClassifier(num_classes=config.DATA.CLASS_NUM,
-                      in_unit=config.MODEL.SPECTRAL_PATCH_DIM+config.MODEL.SPATIAL_PATCH_DIM,
+        return Attention_ALL_Classifier(num_classes=config.DATA.CLASS_NUM,
+                      in_unit=config.MODEL.SPECTRAL_PATCH_DIM,
                       middle=1024,
                       attention=Encoder
                                   (

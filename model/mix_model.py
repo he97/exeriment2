@@ -22,7 +22,7 @@ class mix_spatial_spectral(nn.Module):
         # self.patch_size = config.MODEL.Dtransformer.PATCH_SIZE
 
     def forward(self, spatial_feature,spectral_feature):
-        cat_dimension = len(spatial_feature.shape)
-        assert spectral_feature.shape[cat_dimension-1] == self.spectral_out_dim and spatial_feature.shape[cat_dimension-1] == self.spatial_out_dim, 'dimension illegal'
-        feature = torch.cat((spatial_feature,spectral_feature),cat_dimension-1)
+        # cat_dimension = len(spatial_feature.shape)
+        # assert spectral_feature.shape[cat_dimension-1] == self.spectral_out_dim and spatial_feature.shape[cat_dimension-1] == self.spatial_out_dim, 'dimension illegal'
+        feature = torch.cat((spatial_feature,spectral_feature),1)
         return feature

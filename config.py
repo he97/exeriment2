@@ -18,7 +18,7 @@ _C.BASE = ['']
 # -----------------------------------------------------------------------------
 # classifier settings
 _C.CLASSIFIER = CN()
-_C.CLASSIFIER.MODE = 'C'
+_C.CLASSIFIER.MODE = 'base'
 _C.CLASSIFIER.ATTENTION = CN()
 _C.CLASSIFIER.ATTENTION.DEPTH = 1
 _C.CLASSIFIER.ATTENTION.DIM = 1024

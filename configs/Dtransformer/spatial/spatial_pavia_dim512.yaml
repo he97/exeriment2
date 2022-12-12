@@ -1,6 +1,6 @@
 MODEL:
   TYPE: Dtransformer
-  NAME: spatial_spectral_attention_dim512
+  NAME: spatial_spectral_pavia_dim512
   DROP_PATH_RATE: 0.2
   SPATIAL_PATCH_DIM: 512
   SPECTRAL_PATCH_DIM: 512
@@ -15,24 +15,27 @@ MODEL:
   LABEL_SMOOTHING: 0.0
   LEARNING_RATE: 2.5e-5
 CLASSIFIER:
-  MODE: attention
+  MODE: spatial
   ATTENTION:
     DIM: 512
     DEPTH: 2
 DATA:
-  MODE: spatial+spectral
+  DIM: 102
   IMG_SIZE: 224
-  MASK_PATCH_SIZE: 4
-  MASK_RATIO: 0.6
-  DATASET: huston13-18
+  MASK_PATCH_SIZE: 6
+  MASK_RATIO: 0.3
+  DATASET: pavia
   LEARNING_RATE: 2.5e-5
   SAMPLE_NUM: 180
-  PATCH_DIM: 1024
+  PATCH_DIM: 512
+  SPECTRAL:
+    CHANNEL_DIM: 102
   SPATIAL:
     PCA: False
     COMPONENT_NUM: 3
 TRAIN:
   EPOCHS: 100
+  RF_ETA: 80
   WARMUP_EPOCHS: 10
   BASE_LR: 8e-4
   WARMUP_LR: 2.5e-7

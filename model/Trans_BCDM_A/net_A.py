@@ -803,7 +803,7 @@ class Dtransformer_as_G(DTransformer):
     def _trunc_normal_(self, tensor, mean=0., std=1.):
         trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
 
-    def forward(self, x, mask):
+    def forward(self, x, mask, classifier_mode=None):
         if mask is not None:
             x = self.patch_embed(x)
 
@@ -887,7 +887,7 @@ class Dtransformer_as_G(DTransformer):
             x = self.dropout(x)
 
             x = self.attn_layers(x)
-            return x[:,0,:]
+            return x[:,0,:] if classifier_mode is None else x
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -935,7 +935,7 @@ class Dtransformer_for_spatial(nn.Module):
     def _trunc_normal_(self, tensor, mean=0., std=1.):
         trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
 
-    def forward(self, x, mask):
+    def forward(self, x, mask,classifier_mode=None):
         if mask is not None:
             x = self.patch_embed(x)
 
@@ -987,7 +987,7 @@ class Dtransformer_for_spatial(nn.Module):
             x = self.dropout(x)
 
             x = self.attn_layers(x)
-            return x[:,0,:]
+            return x[:,0,:] if classifier_mode is None else x
 
     @torch.jit.ignore
     def no_weight_decay(self):
