@@ -9,6 +9,7 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 from data.data_finetune import get_finetune_dataloader
 from data.data_pretrain import get_pretrain_dataloader
 from data.spatial_spectral import get_hsi_spatial_spectral_pca_dataloader
+from data.swin_spatial_data import get_hsi_spatial_swin_dataloader
 from data.utils import get_mask_dataloader, get_all_data, to_group, get_sample_data, HsiMaskGenerator, \
     HsiMaskTensorDataSet, HsiDataset, get_pca_data
 from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_without_train_val, \
@@ -176,6 +177,8 @@ def get_hsi_spatial_pca_dataloader(config):
 def get_hsi_spatial_dataloader(config):
     if config.DATA.SPATIAL.PCA:
         return get_hsi_spatial_pca_dataloader(config)
+    elif config.DATA.SPATIAL_ORIGIN:
+        return get_hsi_spatial_swin_dataloader(config)
     else:
         return get_hsi_spatial_without_pca_dataloader(config)
 

@@ -13,6 +13,7 @@ import math
 from functools import partial
 
 from model.spectral_former_vit_pytorch import build_spectral_former
+from model.swin_spatial import Swin_hsi_no_mask
 
 
 def get_pretrain_model(config):
@@ -104,6 +105,15 @@ def get_spatial_G(model_type,config):
                 depth=config.MODEL.Dtransformer.SPATIAL_DEPTH,
                 heads=2)
             )
+    elif model_type == 'swin':
+        if not config.DATA.IS_MASK:
+            # end_stage 用了几个transformer块
+            return Swin_hsi_no_mask(name='swin_tiny', num_classes=config.DATA.CLASS_NUM,
+                                    num_bands=config.DATA.SPECTRAL.CHANNEL_DIM, end_stage=config.MODEL.SWIN.END_STAGE)
+        else:
+            raise Exception('hai mei xie hao')
+
+
 def get_G(config):
     model_type = config.MODEL.TYPE
     if config.DATA.MODE == 'spectral':
@@ -147,3 +157,9 @@ def get_classifier(config,depth=3):
                       middle=1024,
                       prob=0.2,
                       middle_depth=3)
+
+def get_swinTransformer_decoder(config,mask=None):
+    if mask is None:
+        # end_stage 用了几个transformer块
+        return Swin_hsi_no_mask(name='swin_tiny',num_classes=config.DATA.CLASS_NUM,num_bands=config.DATA.SPECTRAL.CHANNEL_DIM,end_stage=3)
+

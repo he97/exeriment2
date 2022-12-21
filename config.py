@@ -77,6 +77,7 @@ _C.DATA.DATA_SOURCE_PATH = ''
 _C.DATA.DATA_TARGET_PATH = ''
 _C.DATA.LABEL_TARGET_PATH = ''
 _C.DATA.LABEL_SOURCE_PATH = ''
+_C.DATA.IS_MASK = True
 # is hsi
 _C.IS_HSI = True
 # id distrubition
@@ -100,9 +101,14 @@ _C.DATA.SPATIAL_MASK_RATIO = 0.6
 
 _C.DATA.CLASS_NUM = 7
 _C.DATA.DIM = 48
+_C.DATA.SPATIAL_ORIGIN = False
 # -----------------------------------------------------------------------------
 # Model settings
 # -----------------------------------------------------------------------------
+# spatial and spectral model settings
+_C.SPATIAL = CN()
+_C.SPATIAL.TYPE = 'swin'
+_C.SPECTRAL = CN()
 _C.MODEL = CN()
 # Model type
 _C.MODEL.TYPE = 'swin'
@@ -139,6 +145,10 @@ _C.MODEL.SWIN.QKV_BIAS = True
 _C.MODEL.SWIN.QK_SCALE = None
 _C.MODEL.SWIN.APE = False
 _C.MODEL.SWIN.PATCH_NORM = True
+# peng swin end_stage -> output dim
+_C.MODEL.SWIN.STAGE_DIM = [96, 192, 384, 768]
+_C.MODEL.SWIN.END_STAGE = 3
+
 
 # Vision Transformer parameters
 _C.MODEL.VIT = CN()
