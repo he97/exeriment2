@@ -418,6 +418,8 @@ def update_config(config, args):
             config.MODEL.SPECTRAL_FORMER.DEPTH = args.attention_depth
         elif type == "Dtransformer":
             config.MODEL.Dtransformer.DEPTH = args.attention_depth
+        elif type == 'swin':
+            pass
         else:
             raise Exception(f"not support type:{type}")
         # config.MODEL.eval(config.MODEL.TYPE).DEPTH = args.attention_depth

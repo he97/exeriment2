@@ -5,12 +5,13 @@ import torch
 from einops import rearrange
 from torch.utils.data import DataLoader
 
-from data import HsiMaskGenerator, HsiMaskTensorDataSet
+
 from model.Trans_BCDM_A.utils_A import cubeData, cubeData1, get_sample_data_without_train_val
 from utils import check_dataset
 
 
 def get_hsi_spatial_swin_dataloader(config):
+    from data import HsiMaskGenerator, HsiMaskTensorDataSet
     halfwidth = config.DATA.SPATIAL.HALF_WIDTH
     dataset = check_dataset(config)
     if dataset == 'indian' or dataset == 'shanghai-hangzhou':
