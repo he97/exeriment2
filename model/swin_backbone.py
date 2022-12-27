@@ -603,8 +603,6 @@ class SwinTransformer(BaseModule):
                  convert_weights=False,
                  frozen_stages=-1,
                  init_cfg=None):
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dims))
-        self.patch_size = patch_size
         if act_cfg is None:
             act_cfg = dict(type='GELU')
         if norm_cfg is None:
@@ -632,7 +630,8 @@ class SwinTransformer(BaseModule):
             raise TypeError('pretrained must be a str or None')
 
         super(SwinTransformer, self).__init__(init_cfg=init_cfg)
-
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dims))
+        self.patch_size = patch_size
         num_layers = len(depths)
         self.out_indices = out_indices
         self.use_abs_pos_embed = use_abs_pos_embed
@@ -825,11 +824,12 @@ class SwinTransformer(BaseModule):
     def forward(self, x, end_stage=None, mask=None):
         x, hw_shape = self.patch_embed(x)
         # 这里添加mask
-        B, L, _ = x.shape
-        mask_token = self.mask_token.expand(B, L, -1)
-        mask = mask.repeat(-1, self.patch_size)
-        w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
-        x = x * (1 - w) + mask_token * w
+        if mask != None:
+            B, L, _ = x.shape
+            mask_token = self.mask_token.expand(B, L, -1)
+            mask = mask.unsqueeze(-1).repeat(1,1,_)
+            w = mask.type_as(mask_token)
+            x = x * (1 - w) + mask_token * w
 
         if self.use_abs_pos_embed:
             x = x + self.absolute_pos_embed
@@ -839,16 +839,34 @@ class SwinTransformer(BaseModule):
         assert isinstance(stages, Iterable)
 
         outs = []
-        for i, stage in enumerate(stages):
-            x, hw_shape, out, out_hw_shape = stage(x, hw_shape)
-            if i in self.out_indices:
-                norm_layer = getattr(self, f'norm{i}')
-                out = norm_layer(out)
-                out = out.view(-1, *out_hw_shape,
-                               self.num_features[i]).permute(0, 3, 1, 2).contiguous()
-                outs.append(out)
 
-        return outs
+        if mask != None:
+            for i, stage in enumerate(stages):
+                x, hw_shape, out, out_hw_shape = stage(x, hw_shape)
+                # if i in self.out_indices:
+                #     norm_layer = getattr(self, f'norm{i}')
+                #     out = norm_layer(out)
+                #     out = out.view(-1, *out_hw_shape,
+                #                    self.num_features[i]).permute(0, 3, 1, 2).contiguous()
+                #     outs.append(out)
+            i = end_stage
+            norm_layer = getattr(self, f'norm{i}')
+            x = norm_layer(x)
+            B,C,L = x.shape
+            H = W = int(L**0.5)
+            x = x.reshape(B,C,H,W)
+            return x
+        else:
+            for i, stage in enumerate(stages):
+                x, hw_shape, out, out_hw_shape = stage(x, hw_shape)
+                if i in self.out_indices:
+                    norm_layer = getattr(self, f'norm{i}')
+                    out = norm_layer(out)
+                    out = out.view(-1, *out_hw_shape,
+                                   self.num_features[i]).permute(0, 3, 1, 2).contiguous()
+                    outs.append(out)
+
+            return outs
 
 
 if __name__ == '__main__':
