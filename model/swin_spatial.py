@@ -2,12 +2,14 @@ import torch
 from einops import rearrange
 from torch import nn
 
+
 def freeze(layer):
     for child in layer.children():
         for param in child.parameters():
             param.requires_grad = False
 
-class Swin_hsi_no_mask(nn.Module):
+
+class Swin_hsi(nn.Module):
 
     def __init__(self,
                  name: str = 'swin_tiny',
@@ -17,11 +19,12 @@ class Swin_hsi_no_mask(nn.Module):
                  end_stage: int = None,
                  keep_patch_embed: bool = True):
         assert num_classes > 0 and num_bands > 0
-        super(Swin_hsi_no_mask, self).__init__()
+        super(Swin_hsi, self).__init__()
         self.end_stage = end_stage
         self.patch_size = patch_size
 
         self.input_proj = nn.Conv2d(num_bands, 3, 1)
+
 
         from model.swin_backbone import config_dict, SwinTransformer
         config = config_dict[name]
@@ -42,16 +45,15 @@ class Swin_hsi_no_mask(nn.Module):
 
         self.avg_pool = nn.AdaptiveMaxPool2d(1)
 
-        token_dim = self.body.stages[end_stage-1 if end_stage is not None else -1].embed_dims
+        token_dim = self.body.stages[end_stage - 1 if end_stage is not None else -1].embed_dims
         self.output_proj = nn.Sequential(nn.Linear(token_dim, num_classes))
-
 
     def forward(self, x, mask=None):
 
         x = self.input_proj(x)
         # rearrange(x,)
-        xs = self.body(x, self.end_stage)
-        token = self.avg_pool(xs[self.end_stage-1]).flatten(1)
+        xs = self.body(x, self.end_stage, mask=mask)
+        token = self.avg_pool(xs[self.end_stage - 1]).flatten(1)
         return token
 
     @torch.no_grad()
@@ -64,3 +66,9 @@ class Swin_hsi_no_mask(nn.Module):
         for i, out in enumerate(outs):
             print(f'\t{i}:{out.shape}')
         print('----------------------')
+
+
+if __name__ == '__main__':
+    a = Swin_hsi(name='swin_tiny', num_classes=7, num_bands=48,
+                 end_stage=3)
+    print('demo')

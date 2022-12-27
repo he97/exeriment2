@@ -603,6 +603,8 @@ class SwinTransformer(BaseModule):
                  convert_weights=False,
                  frozen_stages=-1,
                  init_cfg=None):
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dims))
+        self.patch_size = patch_size
         if act_cfg is None:
             act_cfg = dict(type='GELU')
         if norm_cfg is None:
@@ -820,8 +822,14 @@ class SwinTransformer(BaseModule):
             # load state_dict
             return self.load_state_dict(state_dict, False)
 
-    def forward(self, x, end_stage=None):
+    def forward(self, x, end_stage=None, mask=None):
         x, hw_shape = self.patch_embed(x)
+        # 这里添加mask
+        B, L, _ = x.shape
+        mask_token = self.mask_token.expand(B, L, -1)
+        mask = mask.repeat(-1, self.patch_size)
+        w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+        x = x * (1 - w) + mask_token * w
 
         if self.use_abs_pos_embed:
             x = x + self.absolute_pos_embed

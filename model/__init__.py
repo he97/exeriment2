@@ -4,7 +4,7 @@ from model.SSFTTnet import build_SSFTTnet
 from model.Trans_BCDM_A.net_A import build_Dtransformer, build_Dtransformer_as_G, Dtransformer_for_spatial, Encoder
 from model.classifier import Classifier, FResClassifier, PengResClassifier, AttentionClassifier, \
     Attention_ALL_Classifier
-from model.decoder import spectral_decoder, spatial_decoder
+from model.decoder import spectral_decoder, spatial_decoder, spatial_swin_decoder
 from model.encoder import VisionTransformerForDemo
 from model.finetune_model import build_finetune_G
 from model.mix_model import mix_spatial_spectral
@@ -13,7 +13,7 @@ import math
 from functools import partial
 
 from model.spectral_former_vit_pytorch import build_spectral_former
-from model.swin_spatial import Swin_hsi_no_mask
+from model.swin_spatial import Swin_hsi
 
 
 def get_pretrain_model(config):
@@ -23,23 +23,30 @@ def get_finetune_G(config):
     return build_finetune_G(config)
 
 
-def get_spatial_decoder(config):
-    if config.DATA.SPATIAL.PCA:
-        out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPATIAL.COMPONENT_NUM
-    else:
-        out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPECTRAL.CHANNEL_DIM
-    patches_num = math.ceil((config.DATA.SPATIAL.HALF_WIDTH * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
-    patch_dim = config.MODEL.SPATIAL_PATCH_DIM
-    return spatial_decoder(patch_dim,out_dim,patches_num)
+def get_spatial_decoder(config, model_type):
+    if model_type == 'swin':
+        # a decoder,decoder to 3 dimension then decode to spectral dimension
+        G_out_dim = config.MODEL.SWIN.STAGE_DIM[config.MODEL.SWIN.END_STAGE-1]
+        patch_size = config.DATA.SPATIAL.PATCH_SIZE
+        return spatial_swin_decoder(in_dim=G_out_dim, patch_size=patch_size)
+    elif model_type == 'Dtransformer':
+        if config.DATA.SPATIAL.PCA:
+            out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPATIAL.COMPONENT_NUM
+        else:
+            out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPECTRAL.CHANNEL_DIM
+        patches_num = math.ceil((config.DATA.SPATIAL.HALF_WIDTH * 2 + 1) / config.DATA.SPATIAL.PATCH_SIZE) ** 2
+        patch_dim = config.MODEL.SPATIAL_PATCH_DIM
+        return spatial_decoder(patch_dim,out_dim,patches_num)
 
 
 def get_decoder(config):
+    model_type = config.MODEL.TYPE
     if config.DATA.MODE == 'spectral':
         return get_spectral_decoder(config)
     elif config.DATA.MODE == 'spatial':
-        return get_spatial_decoder(config)
-    elif config.DATA.MODE=='spatial+spectral':
-        return get_spatial_decoder(config), get_spectral_decoder(config)
+        return get_spatial_decoder(config, model_type)
+    elif config.DATA.MODE == 'spatial+spectral':
+        return get_spatial_decoder(config,model_type), get_spectral_decoder(config)
     else:
         raise Exception(f'{config.DATA.MODE} decoder not support yet')
 
@@ -106,12 +113,8 @@ def get_spatial_G(model_type,config):
                 heads=2)
             )
     elif model_type == 'swin':
-        if not config.DATA.IS_MASK:
-            # end_stage 用了几个transformer块
-            return Swin_hsi_no_mask(name='swin_tiny', num_classes=config.DATA.CLASS_NUM,
-                                    num_bands=config.DATA.SPECTRAL.CHANNEL_DIM, end_stage=config.MODEL.SWIN.END_STAGE)
-        else:
-            raise Exception('hai mei xie hao')
+        return Swin_hsi(name='swin_tiny', num_classes=config.DATA.CLASS_NUM,
+                        num_bands=config.DATA.SPECTRAL.CHANNEL_DIM, end_stage=config.MODEL.SWIN.END_STAGE)
 
 
 def get_G(config):
@@ -161,5 +164,5 @@ def get_classifier(config,depth=3):
 def get_swinTransformer_decoder(config,mask=None):
     if mask is None:
         # end_stage 用了几个transformer块
-        return Swin_hsi_no_mask(name='swin_tiny',num_classes=config.DATA.CLASS_NUM,num_bands=config.DATA.SPECTRAL.CHANNEL_DIM,end_stage=3)
+        return Swin_hsi(name='swin_tiny', num_classes=config.DATA.CLASS_NUM, num_bands=config.DATA.SPECTRAL.CHANNEL_DIM, end_stage=3)
 
