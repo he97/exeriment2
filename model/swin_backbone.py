@@ -840,33 +840,16 @@ class SwinTransformer(BaseModule):
 
         outs = []
 
-        if mask != None:
-            for i, stage in enumerate(stages):
-                x, hw_shape, out, out_hw_shape = stage(x, hw_shape)
-                # if i in self.out_indices:
-                #     norm_layer = getattr(self, f'norm{i}')
-                #     out = norm_layer(out)
-                #     out = out.view(-1, *out_hw_shape,
-                #                    self.num_features[i]).permute(0, 3, 1, 2).contiguous()
-                #     outs.append(out)
-            i = end_stage
-            norm_layer = getattr(self, f'norm{i}')
-            x = norm_layer(x)
-            B,C,L = x.shape
-            H = W = int(L**0.5)
-            x = x.reshape(B,C,H,W)
-            return x
-        else:
-            for i, stage in enumerate(stages):
-                x, hw_shape, out, out_hw_shape = stage(x, hw_shape)
-                if i in self.out_indices:
-                    norm_layer = getattr(self, f'norm{i}')
-                    out = norm_layer(out)
-                    out = out.view(-1, *out_hw_shape,
-                                   self.num_features[i]).permute(0, 3, 1, 2).contiguous()
-                    outs.append(out)
+        for i, stage in enumerate(stages):
+            x, hw_shape, out, out_hw_shape = stage(x, hw_shape)
+            if i in self.out_indices:
+                norm_layer = getattr(self, f'norm{i}')
+                out = norm_layer(out)
+                out = out.view(-1, *out_hw_shape,
+                               self.num_features[i]).permute(0, 3, 1, 2).contiguous()
+                outs.append(out)
 
-            return outs
+        return outs
 
 
 if __name__ == '__main__':

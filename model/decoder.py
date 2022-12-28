@@ -92,17 +92,18 @@ class spatial_decoder(nn.Module):
         return {}
 
 class spatial_swin_decoder(nn.Module):
-    def __init__(self, in_dim, patches_num=0, patch_size=0):
+    def __init__(self, in_dim=768,encoder_strider=0, patches_num=0, patch_size=0,dim=0):
         super().__init__()
         assert patch_size!=0, "in decoder,patch_size is 0"
         self.in_dim = in_dim
         self.patch_size = patch_size
+        self.encoder_stride = encoder_strider
 
         self.decoder = nn.Sequential(
             nn.Conv2d(
                 in_channels=self.in_dim,
-                out_channels=self.patch_size ** 2 * 3, kernel_size=1),
-            nn.PixelShuffle(self.patch_size),
+                out_channels=encoder_strider ** 2 * dim, kernel_size=1),
+            nn.PixelShuffle(self.encoder_stride),
         )
         self.patches_num = patches_num
 

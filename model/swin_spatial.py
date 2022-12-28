@@ -53,7 +53,7 @@ class Swin_hsi(nn.Module):
         x = self.input_proj(x)
         # rearrange(x,)
         xs = self.body(x, self.end_stage, mask=mask)
-        token = self.avg_pool(xs[self.end_stage - 1]).flatten(1)
+        token = self.avg_pool(xs[self.end_stage - 1]).flatten(1) if mask == None else xs[self.end_stage - 1]
         return token
 
     @torch.no_grad()
