@@ -30,13 +30,15 @@ def get_spatial_decoder(config, model_type):
         # a decoder,decoder to 3 dimension then decode to spectral dimension
         G_out_dim = config.MODEL.SWIN.STAGE_DIM[config.MODEL.SWIN.END_STAGE - 1]
         dim = config.DATA.SPECTRAL.CHANNEL_DIM
+        patch_size = config.DATA.SPATIAL.PATCH_SIZE
         encoder_strider = 0
         dataset = check_dataset(config)
         if dataset == 'houston':
             encoder_strider = 18
         else:
             raise Exception(f'{dataset} encoder strider not set')
-        return spatial_swin_decoder(in_dim=G_out_dim, dim=dim, encoder_strider=encoder_strider)
+        return spatial_swin_decoder(in_dim=G_out_dim, dim=dim, encoder_strider=encoder_strider,
+                                    patch_size=patch_size)
     elif model_type == 'Dtransformer':
         if config.DATA.SPATIAL.PCA:
             out_dim = config.DATA.SPATIAL.PATCH_SIZE ** 2 * config.DATA.SPATIAL.COMPONENT_NUM

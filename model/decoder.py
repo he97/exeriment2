@@ -92,7 +92,7 @@ class spatial_decoder(nn.Module):
         return {}
 
 class spatial_swin_decoder(nn.Module):
-    def __init__(self, in_dim=768,encoder_strider=0, patches_num=0, patch_size=0,dim=0):
+    def __init__(self, in_dim=768,encoder_strider=0, patches_num=0, patch_size=0,dim=0,):
         super().__init__()
         assert patch_size!=0, "in decoder,patch_size is 0"
         self.in_dim = in_dim
@@ -117,7 +117,9 @@ class spatial_swin_decoder(nn.Module):
         patches_mask_sum = mask.sum()
         # assert D == self.encoder_stride**2 , '解码后的图形不能转为正常的图像'
         # x_rec = x_rec.reshape((B,C,int(D**0.5),-1))
-        mask = mask.unsqueeze(-1).expand(-1, -1, D)
+        # mask = mask.unsqueeze(-1).expand(-1, -1, D)
+        mask = mask.reshape((B,C,int(D**0.5),-1))
+        mask = mask.repeat_interleave(self.patch_size, 2).repeat_interleave(self.patch_size, 1).unsqueeze(1)
         # mask = mask.repeat_interleave(self.encoder.mask_patch_size, 1).contiguous()
         # B,M= mask.size()
         # mask = mask.reshape((B,M,1,1))
