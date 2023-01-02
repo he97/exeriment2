@@ -113,19 +113,19 @@ class spatial_swin_decoder(nn.Module):
     def forward(self, x, mask,rec):
         x_rec = self.decoder(rec)
 
-        B, C, D = x_rec.size()
+        B, D = mask.size()
         patches_mask_sum = mask.sum()
         # assert D == self.encoder_stride**2 , '解码后的图形不能转为正常的图像'
         # x_rec = x_rec.reshape((B,C,int(D**0.5),-1))
         # mask = mask.unsqueeze(-1).expand(-1, -1, D)
-        mask = mask.reshape((B,C,int(D**0.5),-1))
+        mask = mask.reshape((B,int(D**0.5),-1))
         mask = mask.repeat_interleave(self.patch_size, 2).repeat_interleave(self.patch_size, 1).unsqueeze(1)
         # mask = mask.repeat_interleave(self.encoder.mask_patch_size, 1).contiguous()
         # B,M= mask.size()
         # mask = mask.reshape((B,M,1,1))
         # mask = mask.expand((B,M,self.encoder_stride,self.encoder_stride))
         loss_recon = F.l1_loss(x, x_rec, reduction='none')
-        loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5)
+        loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5)/48
         return loss
     @torch.jit.ignore
     def no_weight_decay(self):

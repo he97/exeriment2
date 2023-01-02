@@ -71,11 +71,11 @@ def parse_option():
     # eta
     parser.add_argument("--eta", type=float, required=True, help='eta of entropy')
     # mask_ratio
-    parser.add_argument("--spatial-mask-ratio", type=float, required=True, help='mask ratio')
+    parser.add_argument("--mask-ratio", type=float, required=True, help='mask ratio')
     # refactor_eta
-    parser.add_argument("--spatial-refactor-eta", type=float, required=True, help='eta of refactor loss')
+    parser.add_argument("--refactor-eta", type=float, required=True, help='eta of refactor loss')
     # depth
-    parser.add_argument("--spatial-attention-depth", type=int, required=True, help='eta of refactor loss')
+    parser.add_argument("--attention-depth", type=int, required=True, help='eta of refactor loss')
     # 解析参数
     args = parser.parse_args()
     # 得到yacs cfgNOde，值是原有的值
@@ -110,7 +110,7 @@ def main(config):
         if config.DATA.MODE == 'spectral':
             finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spectral_dataloader(config)
         elif config.DATA.MODE == 'spatial':
-            finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_dataloader(config)
+            finetune_test_loader, finetune_train_src_loader, finetune_train_tgt_loader = get_hsi_spatial_pca_dataloader(config)
         elif config.DATA.MODE == 'spatial+spectral':
             get_hsi_spatial_spectral_without_pca_dataloader(config)
 
@@ -122,10 +122,9 @@ def main(config):
     G = get_G(config).to(device)
     Decoder = get_decoder(config).to(device)
     logger.info(str(G))
-    G_out_dim = config.MODEL.SWIN.STAGE_DIM[config.MODEL.SWIN.END_STAGE-1]
-    C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=G_out_dim).to(device)
+    C1 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=1024).to(device)
     logger.info(str(G))
-    C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=G_out_dim).to(device)
+    C2 = ResClassifier(num_classes=config.DATA.CLASS_NUM, num_unit=1024).to(device)
     # optimizer
     G_optimizer = build_optimizer(config, G, logger, is_pretrain=True)
     Decoder_optimizer = build_optimizer(config, Decoder, logger, is_pretrain=True)
@@ -148,15 +147,7 @@ def main(config):
                         finetune_train_tgt_loader, G_optimizer, Decoder_optimizer, C_optimizer,
                         G_scheduler, Decoder_scheduler, C_scheduler, epoch)
         # # pretrain
-        # preAccuracy: (56.21%)
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 41): INFO Run: 6	val_Accuracy: (57.69%)
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 41): INFO Run: 7	val_Accuracy: (55.90%)
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 41): INFO Run: 8	val_Accuracy: (62.86%)
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 41): INFO Run: 9	val_Accuracy: (60.19%)
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 42): INFO average OA: 57.89 +- 2.61
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 43): INFO average AA: 48.21 +- 4.41
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 44): INFO average kappa: 36.7858 +- 2.9893
-        # [2022-12-30 08:26:04 swin_spatial_houston](method.py 45): INFO accuractrain_train_one_epoch(config, pretrain_model, data_loader_train, optimizer_pretrain, epoch)
+        # pretrain_train_one_epoch(config, pretrain_model, data_loader_train, optimizer_pretrain, epoch)
         # # finetune
         # finetune_train_one_epoch(config, pretrain_model, finetune_model, C1, C2, finetune_train_src_loader,
         #                          finetune_train_tgt_loader, optimizer_finetune, optimizer_C, epoch)
@@ -181,7 +172,7 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
     else:
         criterion = nn.CrossEntropyLoss().cuda()
     eta = config.TRAIN.ETA
-    rf_eta = config.TRAIN.SPATIAL_RF_ETA
+    rf_eta = config.TRAIN.RF_ETA
     G.train()
     Decoder.train()
     C1.train()

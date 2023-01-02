@@ -34,7 +34,7 @@ def get_spatial_decoder(config, model_type):
         encoder_strider = 0
         dataset = check_dataset(config)
         if dataset == 'houston':
-            encoder_strider = 18
+            encoder_strider = 12
         else:
             raise Exception(f'{dataset} encoder strider not set')
         return spatial_swin_decoder(in_dim=G_out_dim, dim=dim, encoder_strider=encoder_strider,
