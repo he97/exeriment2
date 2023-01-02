@@ -29,7 +29,7 @@ def get_spatial_decoder(config, model_type):
     if model_type == 'swin':
         # a decoder,decoder to 3 dimension then decode to spectral dimension
         G_out_dim = config.MODEL.SWIN.STAGE_DIM[config.MODEL.SWIN.END_STAGE - 1]
-        dim = config.DATA.SPECTRAL.CHANNEL_DIM
+        dim = config.DATA.SPATIAL.COMPONENT_NUM if config.DATA.SPATIAL.PCA else config.DATA.SPECTRAL.CHANNEL_DIM
         patch_size = config.DATA.SPATIAL.PATCH_SIZE
         encoder_strider = 0
         dataset = check_dataset(config)
@@ -125,6 +125,9 @@ def get_spatial_G(model_type, config):
                 heads=2)
         )
     elif model_type == 'swin':
+        if config.DATA.SPATIAL.PCA:
+            return Swin_hsi(name='swin_tiny', num_classes=config.DATA.CLASS_NUM,
+                            num_bands=config.DATA.SPATIAL.COMPONENT_NUM, end_stage=config.MODEL.SWIN.END_STAGE)
         return Swin_hsi(name='swin_tiny', num_classes=config.DATA.CLASS_NUM,
                         num_bands=config.DATA.SPECTRAL.CHANNEL_DIM, end_stage=config.MODEL.SWIN.END_STAGE)
 
