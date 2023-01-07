@@ -175,7 +175,7 @@ def get_hsi_spatial_pca_dataloader(config):
     return test_loader, src_train_loader, tgt_train_loader
 
 def get_hsi_spatial_dataloader(config):
-    if config.DATA.SPATIAL.PCA:
+    if config.DATA.SPATIAL.PCA and not config.DATA.SPATIAL_ORIGIN:
         return get_hsi_spatial_pca_dataloader(config)
     elif config.DATA.SPATIAL_ORIGIN:
         if config.DATA.SPATIAL.PCA:
