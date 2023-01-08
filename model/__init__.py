@@ -37,7 +37,7 @@ def get_spatial_decoder(config, model_type):
             encoder_strider = 12
         else:
             raise Exception(f'{dataset} encoder strider not set')
-        return spatial_swin_decoder(in_dim=G_out_dim, dim=dim, encoder_strider=encoder_strider,
+        return spatial_swin_decoder(in_dim=G_out_dim, dim=3, encoder_strider=encoder_strider,
                                     patch_size=patch_size)
     elif model_type == 'Dtransformer':
         if config.DATA.SPATIAL.PCA:

@@ -303,8 +303,8 @@ def train_one_epoch(config, G, Decoder, C1, C2, src_train_loader,
                     img = img.cuda(non_blocking=True)
                     mask = mask.cuda(non_blocking=True)
                 # 从模型的结果得到一个loss
-                G_feature = G(img, mask)
-                refactor_loss += Decoder(x=img, mask=mask, rec=G_feature)
+                G_x,G_feature = G(img, mask)
+                refactor_loss += Decoder(x=G_feature, mask=mask, rec=G_x)
                 # 更新参数
                 # loss_refactor.backward()
                 if config.TRAIN.CLIP_GRAD:

@@ -51,10 +51,14 @@ class Swin_hsi(nn.Module):
     def forward(self, x, mask=None):
 
         x = self.input_proj(x)
+        feature = x.clone().detach()
         # rearrange(x,)
         xs = self.body(x, self.end_stage, mask=mask)
         token = self.avg_pool(xs[self.end_stage - 1]).flatten(1) if mask == None else xs[self.end_stage - 1]
-        return token
+        if mask==None:
+            return token
+        else:
+            return token, feature
 
     @torch.no_grad()
     def print_output_sizes(self, sample_size):
