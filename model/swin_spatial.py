@@ -25,7 +25,6 @@ class Swin_hsi(nn.Module):
 
         self.input_proj = nn.Conv2d(num_bands, 3, 1)
 
-
         from model.swin_backbone import config_dict, SwinTransformer
         config = config_dict[name]
         config['strides'] = (patch_size, 2, 2, 2)
@@ -49,13 +48,13 @@ class Swin_hsi(nn.Module):
         self.output_proj = nn.Sequential(nn.Linear(token_dim, num_classes))
 
     def forward(self, x, mask=None):
-
-        x = self.input_proj(x)
+        B, C, H, W = x.shape
+        x = self.input_proj(x) if C != 3 else x
         feature = x.clone().detach()
         # rearrange(x,)
         xs = self.body(x, self.end_stage, mask=mask)
         token = self.avg_pool(xs[self.end_stage - 1]).flatten(1) if mask == None else xs[self.end_stage - 1]
-        if mask==None:
+        if mask == None:
             return token
         else:
             return token, feature
